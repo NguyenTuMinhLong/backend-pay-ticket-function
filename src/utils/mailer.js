@@ -3,7 +3,7 @@ const config = require('../config/payment');
 
 const formatCurrency = (value) => {
   const amount = Number(value || 0);
-  return `${amount.toLocaleString('vi-VN')} đ`;
+  return `${amount.toLocaleString('en-US')} VND`;
 };
 
 const formatDateTime = (value) => {
@@ -11,7 +11,7 @@ const formatDateTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value);
 
-  return date.toLocaleString('vi-VN', {
+  return date.toLocaleString('en-US', {
     hour12: false,
   });
 };
@@ -83,19 +83,19 @@ const buildInstructionBlock = ({ payment, instruction }) => {
 
   return `
     <div style="background:#eef5ff;padding:16px;border-radius:12px;margin-top:16px;">
-      <p style="margin:0 0 10px;"><strong>Phương thức:</strong> Chuyển khoản ngân hàng</p>
-      <p style="margin:0 0 10px;"><strong>Ngân hàng:</strong> ${escapeHtml(bankName)}</p>
-      <p style="margin:0 0 10px;"><strong>Số tài khoản:</strong> ${escapeHtml(accountNumber)}</p>
-      <p style="margin:0 0 10px;"><strong>Chủ tài khoản:</strong> ${escapeHtml(accountName)}</p>
-      <p style="margin:0 0 10px;"><strong>Số tiền:</strong> ${escapeHtml(formatCurrency(amount))}</p>
-      <p style="margin:0 0 10px;"><strong>Nội dung chuyển khoản:</strong> ${escapeHtml(transferContent)}</p>
+      <p style="margin:0 0 10px;"><strong>Method:</strong> Bank Transfer</p>
+      <p style="margin:0 0 10px;"><strong>Bank:</strong> ${escapeHtml(bankName)}</p>
+      <p style="margin:0 0 10px;"><strong>Account Number:</strong> ${escapeHtml(accountNumber)}</p>
+      <p style="margin:0 0 10px;"><strong>Account Name:</strong> ${escapeHtml(accountName)}</p>
+      <p style="margin:0 0 10px;"><strong>Amount:</strong> ${escapeHtml(formatCurrency(amount))}</p>
+      <p style="margin:0 0 10px;"><strong>Transfer Content:</strong> ${escapeHtml(transferContent)}</p>
       ${
         qrImageUrl
           ? `<div style="margin-top:16px;">
-               <p style="margin:0 0 10px;"><strong>Mã QR thanh toán:</strong></p>
+               <p style="margin:0 0 10px;"><strong>Payment QR Code:</strong></p>
                <img
                  src="${escapeHtml(qrImageUrl)}"
-                 alt="QR thanh toán"
+                 alt="Payment QR Code"
                  style="max-width:240px;width:100%;height:auto;border:1px solid #dbeafe;border-radius:12px;background:#fff;padding:8px;"
                />
              </div>`
@@ -110,11 +110,11 @@ const buildPaymentPendingEmailHtml = ({ payment, instruction }) => {
   const expiresAt = payment.expires_at || '';
 
   return `<!doctype html>
-<html lang="vi">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Thanh toán đơn đặt chỗ</title>
+    <title>Booking Payment</title>
   </head>
   <body style="margin:0;padding:24px;background:#f3f6fb;font-family:Arial,sans-serif;color:#0f172a;">
     <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:16px;padding:28px;border:1px solid #e5e7eb;">
@@ -124,28 +124,28 @@ const buildPaymentPendingEmailHtml = ({ payment, instruction }) => {
       </div>
 
       <h1 style="margin:0 0 18px;font-size:20px;line-height:1.5;text-align:center;">
-        Thanh toán đơn đặt chỗ trong 15 phút
+        Complete your booking payment within 15 minutes
       </h1>
 
       <p style="margin:0 0 16px;line-height:1.7;">
-        Xin chào, giao dịch thanh toán của bạn đã được tạo thành công.
+        Hello, your payment transaction has been successfully created.
       </p>
 
-      <p style="margin:0 0 10px;"><strong>Mã thanh toán:</strong> ${escapeHtml(payment.payment_code)}</p>
-      <p style="margin:0 0 10px;"><strong>Phương thức:</strong> ${escapeHtml(payment.payment_method)}</p>
-      <p style="margin:0 0 10px;"><strong>Số tiền:</strong> ${escapeHtml(formatCurrency(amount))}</p>
-      <p style="margin:0 0 10px;"><strong>Hiệu lực đến:</strong> ${escapeHtml(formatDateTime(expiresAt))}</p>
+      <p style="margin:0 0 10px;"><strong>Payment Code:</strong> ${escapeHtml(payment.payment_code)}</p>
+      <p style="margin:0 0 10px;"><strong>Method:</strong> ${escapeHtml(payment.payment_method)}</p>
+      <p style="margin:0 0 10px;"><strong>Amount:</strong> ${escapeHtml(formatCurrency(amount))}</p>
+      <p style="margin:0 0 10px;"><strong>Expires At:</strong> ${escapeHtml(formatDateTime(expiresAt))}</p>
 
       ${buildInstructionBlock({ payment, instruction })}
 
       <p style="margin:24px 0 0;line-height:1.7;color:#475569;">
-        Nếu bạn đã thanh toán, vui lòng bỏ qua email này.
+        If you have already completed the payment, please ignore this email.
       </p>
 
       <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;" />
 
       <p style="margin:0;text-align:center;color:#94a3b8;font-size:14px;">
-        Nếu bạn không thực hiện thao tác này, vui lòng bỏ qua email.
+        If you did not initiate this request, please ignore this email.
       </p>
     </div>
   </body>
@@ -154,26 +154,28 @@ const buildPaymentPendingEmailHtml = ({ payment, instruction }) => {
 
 const buildPaymentPendingEmailText = ({ payment, instruction }) => {
   const lines = [
-    'Thanh toán đơn đặt chỗ',
+    'Booking Payment',
     '',
-    `Mã thanh toán: ${payment.payment_code}`,
-    `Phương thức: ${payment.payment_method}`,
-    `Số tiền: ${formatCurrency(payment.final_amount || payment.amount || 0)}`,
-    `Hiệu lực đến: ${formatDateTime(payment.expires_at)}`,
+    `Payment Code: ${payment.payment_code}`,
+    `Method: ${payment.payment_method}`,
+    `Amount: ${formatCurrency(payment.final_amount || payment.amount || 0)}`,
+    `Expires At: ${formatDateTime(payment.expires_at)}`,
     '',
   ];
 
   if (instruction) {
-    lines.push(`Ngân hàng: ${instruction.bank_name || config.bankQr.bankName || ''}`);
-    lines.push(`Số tài khoản: ${instruction.bank_account || instruction.account_number || config.bankQr.accountNumber || ''}`);
-    lines.push(`Chủ tài khoản: ${instruction.account_name || config.bankQr.accountName || ''}`);
-    lines.push(`Nội dung chuyển khoản: ${instruction.transfer_content || payment.payment_code}`);
+    lines.push(`Bank: ${instruction.bank_name || config.bankQr.bankName || ''}`);
+    lines.push(
+      `Account Number: ${instruction.bank_account || instruction.account_number || config.bankQr.accountNumber || ''}`
+    );
+    lines.push(`Account Name: ${instruction.account_name || config.bankQr.accountName || ''}`);
+    lines.push(`Transfer Content: ${instruction.transfer_content || payment.payment_code}`);
     if (instruction.qr_image_url || instruction.qr_payload) {
-      lines.push(`QR: ${instruction.qr_image_url || instruction.qr_payload}`);
+      lines.push(`QR Code: ${instruction.qr_image_url || instruction.qr_payload}`);
     }
   }
 
-  lines.push('', 'Nếu bạn đã thanh toán, vui lòng bỏ qua email này.');
+  lines.push('', 'If you have already completed the payment, please ignore this email.');
   return lines.join('\n');
 };
 
@@ -210,15 +212,15 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
               ${escapeHtml(ticket.gender || '')}${ticket.date_of_birth ? ` • ${escapeHtml(String(ticket.date_of_birth))}` : ''}
             </div>
             <div style="margin-top:8px;font-size:13px;color:#334155;">
-              <strong>Mã vé:</strong> ${escapeHtml(ticket.ticket_number || '')}
+              <strong>Ticket Number:</strong> ${escapeHtml(ticket.ticket_number || '')}
             </div>
             <div style="margin-top:4px;font-size:13px;color:#334155;">
-              <strong>Trạng thái:</strong> ${escapeHtml(ticket.ticket_status || '')}
+              <strong>Status:</strong> ${escapeHtml(ticket.ticket_status || '')}
             </div>
             ${
               ticket.issued_at
                 ? `<div style="margin-top:4px;font-size:13px;color:#334155;">
-                    <strong>Xuất lúc:</strong> ${escapeHtml(formatDateTime(ticket.issued_at))}
+                    <strong>Issued At:</strong> ${escapeHtml(formatDateTime(ticket.issued_at))}
                   </div>`
                 : ''
             }
@@ -230,7 +232,7 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
             ${
               seatNumber
                 ? `<div style="margin-top:8px;font-size:13px;color:#334155;">
-                    Ghế: ${escapeHtml(seatNumber)}
+                    Seat: ${escapeHtml(seatNumber)}
                   </div>`
                 : ''
             }
@@ -245,7 +247,7 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
                 : ''
             }
             <div style="margin-top:4px;font-size:13px;color:#334155;">
-              Vui lòng mang CCCD/hộ chiếu khi làm thủ tục
+              Please bring your ID/Passport for check-in
             </div>
           </td>
         </tr>
@@ -256,32 +258,32 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
   const returnFlightBlock = first.return_flight_number
     ? `
       <div style="margin-top:20px;padding:18px;border:1px solid #dbeafe;border-radius:14px;background:#f8fbff;">
-        <div style="font-size:16px;font-weight:700;color:#1e3a8a;">Chiều về / Return Flight</div>
+        <div style="font-size:16px;font-weight:700;color:#1e3a8a;">Return Flight</div>
         <div style="margin-top:10px;font-size:14px;color:#334155;">
-          <strong>Chuyến bay:</strong> ${escapeHtml(first.return_flight_number || '')}
+          <strong>Flight:</strong> ${escapeHtml(first.return_flight_number || '')}
         </div>
         <div style="margin-top:6px;font-size:14px;color:#334155;">
-          <strong>Khởi hành:</strong> ${escapeHtml(first.return_departure_airport_code || '')} - ${escapeHtml(first.return_departure_airport_name || '')}
+          <strong>Departure:</strong> ${escapeHtml(first.return_departure_airport_code || '')} - ${escapeHtml(first.return_departure_airport_name || '')}
         </div>
         <div style="margin-top:6px;font-size:14px;color:#334155;">
-          <strong>Đến:</strong> ${escapeHtml(first.return_arrival_airport_code || '')} - ${escapeHtml(first.return_arrival_airport_name || '')}
+          <strong>Arrival:</strong> ${escapeHtml(first.return_arrival_airport_code || '')} - ${escapeHtml(first.return_arrival_airport_name || '')}
         </div>
         <div style="margin-top:6px;font-size:14px;color:#334155;">
-          <strong>Giờ đi:</strong> ${escapeHtml(formatDateTime(first.return_departure_time))}
+          <strong>Departure Time:</strong> ${escapeHtml(formatDateTime(first.return_departure_time))}
         </div>
         <div style="margin-top:6px;font-size:14px;color:#334155;">
-          <strong>Giờ đến:</strong> ${escapeHtml(formatDateTime(first.return_arrival_time))}
+          <strong>Arrival Time:</strong> ${escapeHtml(formatDateTime(first.return_arrival_time))}
         </div>
       </div>
     `
     : '';
 
   return `<!doctype html>
-<html lang="vi">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Vé điện tử</title>
+    <title>E-ticket</title>
   </head>
   <body style="margin:0;padding:24px;background:#eef2f7;font-family:Arial,sans-serif;color:#0f172a;">
     <div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #dbe3ee;">
@@ -290,15 +292,15 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
           <tr>
             <td style="vertical-align:top;">
               <div style="font-size:34px;font-weight:800;line-height:1;">E-ticket</div>
-              <div style="font-size:16px;opacity:.95;">Vé điện tử</div>
+              <div style="font-size:16px;opacity:.95;">Electronic Ticket</div>
               <div style="margin-top:18px;font-size:14px;opacity:.95;">${escapeHtml(airlineName)}</div>
               <div style="margin-top:4px;font-size:24px;font-weight:700;">${escapeHtml(flightNumber)}</div>
               <div style="margin-top:8px;font-size:14px;opacity:.92;">${escapeHtml(tripDate)}</div>
             </td>
             <td style="vertical-align:top;text-align:right;">
-              <div style="font-size:13px;opacity:.9;">Booking code</div>
+              <div style="font-size:13px;opacity:.9;">Booking Code</div>
               <div style="font-size:26px;font-weight:800;margin-top:2px;">${escapeHtml(bookingCode)}</div>
-              <div style="margin-top:14px;font-size:13px;opacity:.9;">Tình trạng booking</div>
+              <div style="margin-top:14px;font-size:13px;opacity:.9;">Booking Status</div>
               <div style="display:inline-block;margin-top:6px;padding:7px 12px;border-radius:999px;background:rgba(255,255,255,.18);font-size:12px;font-weight:700;">
                 ${escapeHtml(bookingStatus)}
               </div>
@@ -311,7 +313,7 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
         <table role="presentation" style="width:100%;border-collapse:collapse;">
           <tr>
             <td style="width:42%;vertical-align:top;padding-right:12px;">
-              <div style="font-size:15px;color:#64748b;margin-bottom:6px;">Khởi hành</div>
+              <div style="font-size:15px;color:#64748b;margin-bottom:6px;">Departure</div>
               <div style="font-size:32px;font-weight:800;color:#0f172a;">${escapeHtml(departureCode)}</div>
               <div style="font-size:18px;font-weight:700;color:#1f2937;margin-top:4px;">${escapeHtml(departureName)}</div>
               <div style="font-size:14px;color:#475569;margin-top:8px;">
@@ -320,10 +322,10 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
             </td>
             <td style="width:16%;vertical-align:middle;text-align:center;">
               <div style="font-size:28px;color:#3b82f6;">✈</div>
-              <div style="margin-top:4px;font-size:12px;color:#64748b;">Bay thẳng</div>
+              <div style="margin-top:4px;font-size:12px;color:#64748b;">Direct Flight</div>
             </td>
             <td style="width:42%;vertical-align:top;padding-left:12px;">
-              <div style="font-size:15px;color:#64748b;margin-bottom:6px;">Điểm đến</div>
+              <div style="font-size:15px;color:#64748b;margin-bottom:6px;">Arrival</div>
               <div style="font-size:32px;font-weight:800;color:#0f172a;">${escapeHtml(arrivalCode)}</div>
               <div style="font-size:18px;font-weight:700;color:#1f2937;margin-top:4px;">${escapeHtml(arrivalName)}</div>
               <div style="font-size:14px;color:#475569;margin-top:8px;">
@@ -336,8 +338,8 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
         <div style="margin-top:22px;padding:16px 18px;border:1px solid #e5e7eb;border-radius:14px;background:#f8fafc;">
           <table role="presentation" style="width:100%;border-collapse:collapse;">
             <tr>
-              <td style="font-size:13px;color:#334155;padding:4px 0;">Vui lòng mang CCCD/hộ chiếu để làm thủ tục</td>
-              <td style="font-size:13px;color:#334155;padding:4px 0;">Có mặt tại sân bay ít nhất 90 phút trước giờ khởi hành</td>
+              <td style="font-size:13px;color:#334155;padding:4px 0;">Please bring your ID/Passport for check-in</td>
+              <td style="font-size:13px;color:#334155;padding:4px 0;">Please arrive at the airport at least 90 minutes before departure</td>
             </tr>
           </table>
         </div>
@@ -346,7 +348,7 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
 
         <div style="margin-top:28px;">
           <div style="font-size:28px;font-weight:800;color:#0f172a;">Passenger Details</div>
-          <div style="font-size:14px;color:#64748b;margin-top:4px;">Thông tin hành khách</div>
+          <div style="font-size:14px;color:#64748b;margin-top:4px;">Passenger information</div>
 
           <table role="presentation" style="width:100%;border-collapse:collapse;margin-top:16px;border:1px solid #e5e7eb;border-radius:14px;overflow:hidden;">
             <thead>
@@ -363,12 +365,12 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
         </div>
 
         <div style="margin-top:24px;padding:18px;border-radius:14px;background:#eff6ff;border:1px solid #bfdbfe;">
-          <div style="font-size:14px;color:#1e3a8a;font-weight:700;">Thông tin nhận vé</div>
+          <div style="font-size:14px;color:#1e3a8a;font-weight:700;">Ticket Information</div>
           <div style="margin-top:8px;font-size:14px;color:#334155;">
-            Email nhận vé: ${escapeHtml(booking.contact_email || '')}
+            Ticket email: ${escapeHtml(booking.contact_email || '')}
           </div>
           <div style="margin-top:6px;font-size:14px;color:#334155;">
-            Mã đặt chỗ: ${escapeHtml(bookingCode)}
+            Booking code: ${escapeHtml(bookingCode)}
           </div>
         </div>
       </div>
@@ -380,15 +382,15 @@ const buildTicketIssuedEmailHtml = ({ booking, tickets }) => {
 const buildTicketIssuedEmailText = ({ booking, tickets }) => {
   const first = tickets[0] || {};
   const lines = [
-    'E-TICKET / VE DIEN TU',
+    'E-TICKET',
     '',
-    `Booking code: ${booking.booking_code || ''}`,
-    `Trang thai: ${booking.status || first.booking_status || ''}`,
-    `Chuyen bay: ${first.outbound_flight_number || ''}`,
-    `Khoi hanh: ${first.outbound_departure_airport_code || ''} - ${first.outbound_departure_airport_name || ''}`,
-    `Diem den: ${first.outbound_arrival_airport_code || ''} - ${first.outbound_arrival_airport_name || ''}`,
-    `Gio di: ${formatDateTime(first.outbound_departure_time)}`,
-    `Gio den: ${formatDateTime(first.outbound_arrival_time)}`,
+    `Booking Code: ${booking.booking_code || ''}`,
+    `Status: ${booking.status || first.booking_status || ''}`,
+    `Flight: ${first.outbound_flight_number || ''}`,
+    `Departure: ${first.outbound_departure_airport_code || ''} - ${first.outbound_departure_airport_name || ''}`,
+    `Arrival: ${first.outbound_arrival_airport_code || ''} - ${first.outbound_arrival_airport_name || ''}`,
+    `Departure Time: ${formatDateTime(first.outbound_departure_time)}`,
+    `Arrival Time: ${formatDateTime(first.outbound_arrival_time)}`,
     '',
     'Passenger Details:',
   ];
@@ -397,8 +399,8 @@ const buildTicketIssuedEmailText = ({ booking, tickets }) => {
     const baggageKg = Number(ticket.baggage_kg || 0);
     const extraBaggageKg = Number(ticket.extra_baggage_kg || 0);
     const checkedBaggage = baggageKg + extraBaggageKg;
-    const seatText = ticket.seat_number ? ` | Ghe ${ticket.seat_number}` : '';
-    const baggageText = checkedBaggage > 0 ? ` | Hanh ly ${checkedBaggage}KG` : '';
+    const seatText = ticket.seat_number ? ` | Seat ${ticket.seat_number}` : '';
+    const baggageText = checkedBaggage > 0 ? ` | Baggage ${checkedBaggage}KG` : '';
 
     lines.push(
       `${index + 1}. ${ticket.full_name || ''} | ${ticket.ticket_number || ''} | ${ticket.ticket_status || ''}${seatText}${baggageText}`
@@ -409,25 +411,25 @@ const buildTicketIssuedEmailText = ({ booking, tickets }) => {
     lines.push(
       '',
       'Return Flight:',
-      `Chuyen bay: ${first.return_flight_number || ''}`,
-      `Khoi hanh: ${first.return_departure_airport_code || ''} - ${first.return_departure_airport_name || ''}`,
-      `Diem den: ${first.return_arrival_airport_code || ''} - ${first.return_arrival_airport_name || ''}`,
-      `Gio di: ${formatDateTime(first.return_departure_time)}`,
-      `Gio den: ${formatDateTime(first.return_arrival_time)}`
+      `Flight: ${first.return_flight_number || ''}`,
+      `Departure: ${first.return_departure_airport_code || ''} - ${first.return_departure_airport_name || ''}`,
+      `Arrival: ${first.return_arrival_airport_code || ''} - ${first.return_arrival_airport_name || ''}`,
+      `Departure Time: ${formatDateTime(first.return_departure_time)}`,
+      `Arrival Time: ${formatDateTime(first.return_arrival_time)}`
     );
   }
 
   lines.push(
     '',
-    `Email nhan ve: ${booking.contact_email || ''}`,
-    'Vui long mang giay to tuy than khi lam thu tuc.'
+    `Ticket email: ${booking.contact_email || ''}`,
+    'Please bring your identification documents for check-in.'
   );
 
   return lines.join('\n');
 };
 
 const sendPaymentPendingEmail = async ({ payment, instruction, email }) => {
-  const subject = `Thanh toán đơn đặt chỗ ${payment.payment_code}`;
+  const subject = `Booking Payment ${payment.payment_code}`;
   const html = buildPaymentPendingEmailHtml({ payment, instruction });
   const text = buildPaymentPendingEmailText({ payment, instruction });
   return sendEmail({ to: email, subject, html, text });
@@ -442,7 +444,7 @@ const sendTicketIssuedEmail = async ({ booking, tickets, email }) => {
     };
   }
 
-  const subject = `Ve dien tu booking ${booking.booking_code || ''}`.trim();
+  const subject = `E-ticket for booking ${booking.booking_code || ''}`.trim();
   const html = buildTicketIssuedEmailHtml({ booking, tickets });
   const text = buildTicketIssuedEmailText({ booking, tickets });
   return sendEmail({ to: email || booking.contact_email, subject, html, text });
