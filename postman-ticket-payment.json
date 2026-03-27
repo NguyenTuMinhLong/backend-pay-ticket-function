@@ -1,0 +1,54 @@
+{
+  "info": {
+    "name": "Vivudee Payment + Ticket",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Confirm payment and auto issue ticket",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/confirm",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "confirm"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_code\": \"PAY0001\",\n  \"success\": true,\n  \"gateway_transaction_id\": \"TEST-TXN-001\",\n  \"gateway_response\": {\n    \"status\": \"success\",\n    \"source\": \"manual\"\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Issue ticket manual",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:3000/tickets/issue/44",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["tickets", "issue", "44"]
+        }
+      }
+    },
+    {
+      "name": "Get ticket by booking code",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:3000/tickets/booking/ABC123",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["tickets", "booking", "ABC123"]
+        }
+      }
+    }
+  ]
+}
