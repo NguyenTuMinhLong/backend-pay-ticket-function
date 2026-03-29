@@ -1,0 +1,147 @@
+{
+  "info": {
+    "name": "Vivudee Payment + Ticket + MoMo",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Init BANK_QR payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/init",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "init"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": 44,\n  \"email\": \"demo@example.com\",\n  \"phone\": \"0900000000\",\n  \"name\": \"Demo User\",\n  \"payment_method\": \"BANK_QR\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Init MOMO payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/init",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "init"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": 44,\n  \"email\": \"demo@example.com\",\n  \"phone\": \"0900000000\",\n  \"name\": \"Demo User\",\n  \"payment_method\": \"MOMO\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Confirm payment manually",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/confirm",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "confirm"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_code\": \"PAY0001\",\n  \"success\": true,\n  \"gateway_transaction_id\": \"TEST-TXN-001\",\n  \"gateway_response\": {\n    \"status\": \"success\",\n    \"source\": \"manual\"\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Cancel payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/cancel",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "cancel"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"payment_code\": \"PAY0001\"\n}"
+        }
+      }
+    },
+    {
+      "name": "MoMo IPN simulate success",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/momo/ipn",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "momo", "ipn"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"partnerCode\": \"MOMOBKUN20180529\",\n  \"orderId\": \"PAY0001\",\n  \"requestId\": \"REQ_PAY0001_123456\",\n  \"amount\": 500000,\n  \"orderInfo\": \"Thanh toan don hang PAY0001\",\n  \"orderType\": \"momo_wallet\",\n  \"transId\": 1234567890,\n  \"resultCode\": 0,\n  \"message\": \"Successful.\",\n  \"payType\": \"qr\",\n  \"responseTime\": 1743321600000,\n  \"extraData\": \"eyJwYXltZW50X2NvZGUiOiJQQVkwMDAxIiwiYm9va2luZ19pZCI6NDR9\",\n  \"signature\": \"REPLACE_WITH_REAL_SIGNATURE\"\n}"
+        }
+      }
+    },
+    {
+      "name": "Get payment by code",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:3000/payments/PAY0001",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "PAY0001"]
+        }
+      }
+    },
+    {
+      "name": "Issue ticket manual",
+      "request": {
+        "method": "POST",
+        "url": {
+          "raw": "http://localhost:3000/tickets/issue/44",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["tickets", "issue", "44"]
+        }
+      }
+    },
+    {
+      "name": "Get ticket by booking code",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "http://localhost:3000/tickets/booking/ABC123",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["tickets", "booking", "ABC123"]
+        }
+      }
+    }
+  ]
+}
