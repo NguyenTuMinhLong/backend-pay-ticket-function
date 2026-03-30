@@ -64,20 +64,64 @@ const handleSepayIpn = async (req, res, next) => {
   }
 };
 
+// FIX: MoMo IPN — MoMo gọi server-to-server về đây sau khi user thanh toán
+// Phải trả HTTP 200 + { resultCode: 0 } để MoMo biết đã nhận
 const handleMomoIpn = async (req, res, next) => {
   try {
-    const result = await paymentService.handleMomoIpn(validateMomoIpnPayload(req.body));
+    const result = await paymentService.handleMomoIpn(
+      validateMomoIpnPayload(req.body || {})
+    );
     res.status(200).json(result);
   } catch (error) {
-    next(error);
+    // Luôn trả 200 cho MoMo IPN dù có lỗi, tránh MoMo retry vô tận
+    res.status(200).json({ resultCode: 99, message: error?.message || 'Internal error' });
   }
 };
 
+// FIX: MoMo Return — MoMo redirect user về đây sau khi thanh toán
+// Sau đó redirect tiếp về FRONTEND /payment/momo/result?status=...
 const handleMomoReturn = async (req, res, next) => {
   try {
-    const result = await paymentService.handleMomoReturn(req.query);
-    const paymentCode = result.payment_code ? `?payment_code=${encodeURIComponent(result.payment_code)}` : '';
-    res.redirect(`/payments/return/${result.status}${paymentCode}`);
+    const result = await paymentService.handleMomoReturn(req.query || {});
+
+    if (result.redirect) {
+      return res.redirect(302, result.redirect);
+    }
+
+    // Fallback HTML nếu không cấu hình FRONTEND_URL
+    const statusLabel = {
+      success: '✅ Thanh toán thành công',
+      cancel:  '⚠️ Đã hủy thanh toán',
+      error:   '❌ Thanh toán thất bại',
+    };
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${statusLabel[result.status] || 'Kết quả thanh toán'}</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; display: flex;
+           align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { width: calc(100% - 32px); max-width: 480px; background: #fff;
+            border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.12); padding: 32px; text-align: center; }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    p  { color: #475569; line-height: 1.6; margin: 8px 0; }
+    .code { font-weight: 700; color: #1d4ed8; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>${statusLabel[result.status] || 'Kết quả thanh toán'}</h2>
+    ${result.booking_code ? `<p>Mã booking: <span class="code">${result.booking_code}</span></p>` : ''}
+    ${result.payment_code ? `<p>Mã thanh toán: <span class="code">${result.payment_code}</span></p>` : ''}
+    <p style="margin-top:20px;font-size:13px;color:#94a3b8">
+      Vui lòng quay lại ứng dụng để kiểm tra đơn hàng.
+    </p>
+  </div>
+</body>
+</html>`);
   } catch (error) {
     next(error);
   }
@@ -94,60 +138,35 @@ const redirectToSepayCheckout = async (req, res, next) => {
 };
 
 const renderPaymentReturnPage = async (req, res) => {
-  const status = String(req.params.status || 'success').toLowerCase();
+  const status      = String(req.params.status || 'success').toLowerCase();
   const paymentCode = String(req.query.payment_code || '').trim();
 
   const titleMap = {
     success: 'Thanh toán thành công',
-    error: 'Thanh toán lỗi',
-    cancel: 'Bạn đã hủy thanh toán',
+    error:   'Thanh toán lỗi',
+    cancel:  'Bạn đã hủy thanh toán',
   };
-
   const messageMap = {
     success: 'Bạn có thể quay lại ứng dụng để kiểm tra trạng thái đơn hàng.',
-    error: 'Vui lòng thử lại hoặc chọn phương thức thanh toán khác.',
-    cancel:
-      'Đơn thanh toán vẫn ở trạng thái chờ cho tới khi hết hạn hoặc bạn tạo lại giao dịch mới.',
+    error:   'Vui lòng thử lại hoặc chọn phương thức thanh toán khác.',
+    cancel:  'Đơn thanh toán vẫn ở trạng thái chờ cho tới khi hết hạn hoặc bạn tạo lại giao dịch mới.',
   };
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(`<!doctype html>
 <html lang="vi">
   <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>${titleMap[status] || 'Payment result'}</title>
     <style>
-      body {
-        font-family: Arial, sans-serif;
-        background: #f8fafc;
-        color: #0f172a;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 100vh;
-        margin: 0;
-      }
-      .card {
-        width: calc(100% - 32px);
-        max-width: 480px;
-        background: white;
-        border-radius: 16px;
-        box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12);
-        padding: 28px;
-      }
-      h1 {
-        margin: 0 0 12px;
-        font-size: 24px;
-      }
-      p {
-        color: #475569;
-        line-height: 1.6;
-      }
-      .code {
-        font-weight: 700;
-        color: #1d4ed8;
-      }
+      body { font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a;
+             display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+      .card { width: calc(100% - 32px); max-width: 480px; background: white;
+              border-radius: 16px; box-shadow: 0 16px 40px rgba(15,23,42,.12); padding: 28px; }
+      h1 { margin: 0 0 12px; font-size: 24px; }
+      p  { color: #475569; line-height: 1.6; }
+      .code { font-weight: 700; color: #1d4ed8; }
     </style>
   </head>
   <body>
