@@ -133,7 +133,11 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
     if (!payment) throw dbError;
   }
 
-  if (!payment) throw new HttpError(500, 'init_payment_by_contact returned no payment');
+  // Nếu DB function trả về null (không throw) → cũng thử lấy pending payment cũ
+  if (!payment) {
+    payment = await getExistingPendingPaymentByBooking(booking_id).catch(() => null);
+    if (!payment) throw new HttpError(500, 'init_payment_by_contact returned no payment');
+  }
 
   let providerPayload = {};
 
