@@ -131,6 +131,23 @@ const createMomoPaymentInstruction = async (payment) => {
   const response = await requestJson(endpoint, payload);
 
   if (Number(response.resultCode) !== 0) {
+    // resultCode 1041: orderId đã tồn tại trên MoMo — tái sử dụng payUrl nếu có
+    if (Number(response.resultCode) === 1041 && response.payUrl) {
+      return {
+        provider:     'MOMO',
+        request_id:   requestId,
+        order_id:     orderId,
+        amount,
+        order_info:   orderInfo,
+        request_type: requestType,
+        pay_url:      response.payUrl,
+        deeplink:     response.deeplink || response.deeplinkMiniApp || null,
+        qr_payload:   response.qrCodeUrl || response.payUrl         || null,
+        qr_code_url:  response.qrCodeUrl                            || null,
+        extra_data:   extraData,
+        raw_response: response,
+      };
+    }
     throw new HttpError(400, response.message || 'MoMo create payment failed', {
       provider_response: response,
     });

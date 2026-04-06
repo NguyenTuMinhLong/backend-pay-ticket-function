@@ -127,12 +127,9 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
     const { rows } = await db.query(query, values);
     payment = rows[0];
   } catch (dbError) {
-    // Khi DB báo pending payment đã tồn tại → tái sử dụng thay vì fail hoàn toàn.
-    // Điều này xảy ra với tài khoản cũ đã khởi tạo payment trước đó.
-    const errMsg = String(dbError?.message || '').toLowerCase();
-    if (errMsg.includes('pending')) {
-      payment = await getExistingPendingPaymentByBooking(booking_id);
-    }
+    // Khi DB lỗi bất kỳ (pending đã tồn tại, constraint, ...) → thử lấy pending payment cũ.
+    // Xảy ra với tài khoản cũ đã từng khởi tạo payment cho booking này.
+    payment = await getExistingPendingPaymentByBooking(booking_id).catch(() => null);
     if (!payment) throw dbError;
   }
 
