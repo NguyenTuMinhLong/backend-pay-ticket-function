@@ -105,15 +105,33 @@ const enrichPaymentWithTickets = async (payment) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-// Lấy pending payment gần nhất của booking — dùng khi DB báo đã tồn tại pending.
+// Lấy pending payment gần nhất của booking
 const getExistingPendingPaymentByBooking = async (bookingId) => {
   const { rows } = await db.query(
-    `SELECT * FROM payments
-     WHERE booking_id = $1 AND status = 'PENDING'
+    `SELECT * FROM payments WHERE booking_id = $1 AND status = 'PENDING'
      ORDER BY created_at DESC LIMIT 1`,
     [bookingId]
   );
   return rows[0] || null;
+};
+
+// Cancel TẤT CẢ pending payments của các booking cũ liên quan đến contact_email.
+// Dùng khi init_payment_by_contact fail do cross-booking conflict theo email/phone.
+const cancelAllPendingPaymentsByEmail = async (email) => {
+  try {
+    const { rows } = await db.query(
+      `SELECT p.payment_code FROM payments p
+       JOIN bookings b ON b.id = p.booking_id
+       WHERE b.contact_email = $1 AND p.status = 'PENDING'`,
+      [email]
+    );
+    await Promise.all(
+      rows.map(r => db.query(`SELECT * FROM cancel_payment($1)`, [r.payment_code]).catch(() => {}))
+    );
+    return rows.length;
+  } catch (_) {
+    return 0;
+  }
 };
 
 // ── initPayment ───────────────────────────────────────────────────────────────
@@ -121,20 +139,37 @@ const getExistingPendingPaymentByBooking = async (bookingId) => {
 const initPayment = async ({ booking_id, email, phone, name, payment_method, voucher_code }) => {
   let payment;
 
+  const tryInitDb = async () => {
+    const { rows } = await db.query(
+      `select * from init_payment_by_contact($1, $2, $3, $4, $5, $6)`,
+      [booking_id, email, phone, name || null, payment_method, voucher_code || null]
+    );
+    return rows[0] || null;
+  };
+
   try {
-    const query  = `select * from init_payment_by_contact($1, $2, $3, $4, $5, $6)`;
-    const values = [booking_id, email, phone, name || null, payment_method, voucher_code || null];
-    const { rows } = await db.query(query, values);
-    payment = rows[0];
+    payment = await tryInitDb();
   } catch (dbError) {
-    // Khi DB lỗi bất kỳ (pending đã tồn tại, constraint, ...) → thử lấy pending payment cũ.
-    // Xảy ra với tài khoản cũ đã từng khởi tạo payment cho booking này.
+    // Bước 1: thử lấy pending payment của chính booking này
     payment = await getExistingPendingPaymentByBooking(booking_id).catch(() => null);
+
+    if (!payment) {
+      // Bước 2: conflict cross-booking (DB check theo email/phone) → cancel pending cũ và retry
+      const cancelled = await cancelAllPendingPaymentsByEmail(email);
+      if (cancelled > 0) {
+        try {
+          payment = await tryInitDb();
+        } catch (_) {
+          payment = null;
+        }
+      }
+    }
+
     if (!payment) throw dbError;
   }
 
-  // Nếu DB function trả về null (không throw) → cũng thử lấy pending payment cũ
   if (!payment) {
+    // DB function trả về null (không throw) → fallback
     payment = await getExistingPendingPaymentByBooking(booking_id).catch(() => null);
     if (!payment) throw new HttpError(500, 'init_payment_by_contact returned no payment');
   }
