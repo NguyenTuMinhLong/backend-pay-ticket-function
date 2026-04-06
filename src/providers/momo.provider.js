@@ -38,7 +38,7 @@ const requestJson = (targetUrl, payload) =>
           'Content-Type':   'application/json',
           'Content-Length': Buffer.byteLength(data),
         },
-        timeout: 30000,
+        timeout: 10000,
       },
       (res) => {
         let body = '';
