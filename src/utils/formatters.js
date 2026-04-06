@@ -20,6 +20,25 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, se
     ? providerPayload
     : gatewayResponse.provider === 'MOMO' ? gatewayResponse : {};
 
+  // Kiểm tra MoMo trước — ưu tiên providerPayload.provider hơn DB method
+  // để tránh sai khi existing payment trong DB có payment_method khác (e.g. BANK_QR)
+  if (method === 'MOMO' || momoPayload.provider === 'MOMO') {
+    return {
+      type:         'MOMO',
+      provider:     'MOMO',
+      pay_url:      momoPayload.pay_url      || payment.pay_url      || null,
+      deeplink:     momoPayload.deeplink     || payment.deeplink     || null,
+      qr_payload:   momoPayload.qr_payload   || payment.qr_payload   || null,
+      qr_code_url:  momoPayload.qr_code_url  || null,
+      order_id:     momoPayload.order_id     || payment.payment_code || null,
+      request_id:   momoPayload.request_id   || null,
+      redirect_url: momoConfig && momoConfig.redirectUrl ? momoConfig.redirectUrl : null,
+      ipn_url:      momoConfig && momoConfig.ipnUrl      ? momoConfig.ipnUrl      : null,
+      auto_confirm_ready: true,
+      note: 'Frontend dùng pay_url để redirect user sang MoMo. Sau khi xong MoMo redirect về /payments/momo/return.',
+    };
+  }
+
   if (method === 'BANK_QR' && sepayPayload.provider === 'SEPAY') {
     return {
       type:                 'SEPAY_CHECKOUT',
@@ -46,24 +65,6 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, se
       transfer_content: providerPayload.transfer_content || payment.transfer_content || payment.payment_code || null,
       auto_confirm_ready: true,
       auto_confirm_note:  'Use POST /payments/webhook/bank to auto-confirm after reconciliation.',
-    };
-  }
-
-  // FIX: MOMO instruction đầy đủ — trả pay_url, deeplink, qr_code_url
-  if (method === 'MOMO') {
-    return {
-      type:         'MOMO',
-      provider:     'MOMO',
-      pay_url:      momoPayload.pay_url      || payment.pay_url      || null,
-      deeplink:     momoPayload.deeplink     || payment.deeplink     || null,
-      qr_payload:   momoPayload.qr_payload   || payment.qr_payload   || null,
-      qr_code_url:  momoPayload.qr_code_url  || null,
-      order_id:     momoPayload.order_id     || payment.payment_code || null,
-      request_id:   momoPayload.request_id   || null,
-      redirect_url: momoConfig && momoConfig.redirectUrl ? momoConfig.redirectUrl : null,
-      ipn_url:      momoConfig && momoConfig.ipnUrl      ? momoConfig.ipnUrl      : null,
-      auto_confirm_ready: true,
-      note: 'Frontend dùng pay_url để redirect user sang MoMo. Sau khi xong MoMo redirect về /payments/momo/return.',
     };
   }
 

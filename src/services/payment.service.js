@@ -103,13 +103,38 @@ const enrichPaymentWithTickets = async (payment) => {
   }
 };
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Lấy pending payment gần nhất của booking — dùng khi DB báo đã tồn tại pending.
+const getExistingPendingPaymentByBooking = async (bookingId) => {
+  const { rows } = await db.query(
+    `SELECT * FROM payments
+     WHERE booking_id = $1 AND status = 'PENDING'
+     ORDER BY created_at DESC LIMIT 1`,
+    [bookingId]
+  );
+  return rows[0] || null;
+};
+
 // ── initPayment ───────────────────────────────────────────────────────────────
 
 const initPayment = async ({ booking_id, email, phone, name, payment_method, voucher_code }) => {
-  const query  = `select * from init_payment_by_contact($1, $2, $3, $4, $5, $6)`;
-  const values = [booking_id, email, phone, name || null, payment_method, voucher_code || null];
-  const { rows } = await db.query(query, values);
-  let payment = rows[0];
+  let payment;
+
+  try {
+    const query  = `select * from init_payment_by_contact($1, $2, $3, $4, $5, $6)`;
+    const values = [booking_id, email, phone, name || null, payment_method, voucher_code || null];
+    const { rows } = await db.query(query, values);
+    payment = rows[0];
+  } catch (dbError) {
+    // Khi DB báo pending payment đã tồn tại → tái sử dụng thay vì fail hoàn toàn.
+    // Điều này xảy ra với tài khoản cũ đã khởi tạo payment trước đó.
+    const errMsg = String(dbError?.message || '').toLowerCase();
+    if (errMsg.includes('pending')) {
+      payment = await getExistingPendingPaymentByBooking(booking_id);
+    }
+    if (!payment) throw dbError;
+  }
 
   if (!payment) throw new HttpError(500, 'init_payment_by_contact returned no payment');
 
@@ -118,16 +143,22 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
   // ── BANK_QR ────────────────────────────────────────────────────────────────
   if (payment_method === 'BANK_QR') {
     if (config.sepay.enabled) {
-      providerPayload = createSepayCheckoutInstruction(payment);
-      payment = (await updatePaymentProviderFields(payment.payment_code, {
-        transfer_content: payment.payment_code,
-        gateway_response: {
-          ...providerPayload,
-          provider:    'SEPAY',
-          mode:        'hosted_checkout',
-          generatedAt: new Date().toISOString(),
-        },
-      })) || payment;
+      const existingGw = payment.gateway_response || {};
+      // Tái sử dụng SePay instruction nếu đã có
+      if (existingGw.provider === 'SEPAY' && existingGw.checkout_url) {
+        providerPayload = existingGw;
+      } else {
+        providerPayload = createSepayCheckoutInstruction(payment);
+        payment = (await updatePaymentProviderFields(payment.payment_code, {
+          transfer_content: payment.payment_code,
+          gateway_response: {
+            ...providerPayload,
+            provider:    'SEPAY',
+            mode:        'hosted_checkout',
+            generatedAt: new Date().toISOString(),
+          },
+        })) || payment;
+      }
     } else {
       providerPayload = createBankQrInstruction(payment);
       payment = (await updatePaymentProviderFields(payment.payment_code, {
@@ -144,23 +175,29 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
     }
   }
 
-  // ── MOMO — FIX: gọi MoMo API thật thay vì trả placeholder ────────────────
+  // ── MOMO ──────────────────────────────────────────────────────────────────
   if (payment_method === 'MOMO') {
     if (!config.momo.enabled) {
       throw new HttpError(400, 'MoMo payment is not configured on this server');
     }
 
-    providerPayload = await createMomoPaymentInstruction(payment);
-
-    payment = (await updatePaymentProviderFields(payment.payment_code, {
-      qr_payload:       providerPayload.qr_payload,
-      gateway_response: {
-        ...providerPayload,
-        provider:    'MOMO',
-        mode:        'gateway_redirect',
-        generatedAt: new Date().toISOString(),
-      },
-    })) || payment;
+    const existingGw = payment.gateway_response || {};
+    // Tái sử dụng pay_url cũ nếu đã có — tránh gọi lại MoMo với cùng orderId
+    // (MoMo reject duplicate orderId nếu transaction chưa kết thúc).
+    if (existingGw.provider === 'MOMO' && existingGw.pay_url) {
+      providerPayload = existingGw;
+    } else {
+      providerPayload = await createMomoPaymentInstruction(payment);
+      payment = (await updatePaymentProviderFields(payment.payment_code, {
+        qr_payload:       providerPayload.qr_payload,
+        gateway_response: {
+          ...providerPayload,
+          provider:    'MOMO',
+          mode:        'gateway_redirect',
+          generatedAt: new Date().toISOString(),
+        },
+      })) || payment;
+    }
   }
 
   const response = mapPayment(payment, providerPayload);
