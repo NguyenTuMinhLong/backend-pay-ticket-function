@@ -179,12 +179,31 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
     }
 
     const existingGw = payment.gateway_response || {};
-    // Tái sử dụng pay_url cũ nếu đã có — tránh gọi lại MoMo với cùng orderId
-    // (MoMo reject duplicate orderId nếu transaction chưa kết thúc).
+
     if (existingGw.provider === 'MOMO' && existingGw.pay_url) {
+      // Đã có pay_url hợp lệ → tái sử dụng, không gọi lại MoMo
       providerPayload = existingGw;
     } else {
-      providerPayload = await createMomoPaymentInstruction(payment);
+      // Thử tạo MoMo instruction. Nếu MoMo từ chối (vd: orderId đã tồn tại,
+      // sandbox hết hạn...) → huỷ payment hiện tại và tạo payment_code mới.
+      let momoResult = null;
+      try {
+        momoResult = await createMomoPaymentInstruction(payment);
+      } catch (_momoErr) {
+        // Cancel payment cũ (payment_code cũ đã bị MoMo từ chối)
+        await db.query(`select * from cancel_payment($1)`, [payment.payment_code]).catch(() => {});
+
+        // Tạo payment mới với payment_code mới
+        const { rows: freshRows } = await db.query(
+          `select * from init_payment_by_contact($1, $2, $3, $4, $5, $6)`,
+          [booking_id, email, phone, name || null, payment_method, voucher_code || null]
+        );
+        if (!freshRows[0]) throw _momoErr;
+        payment    = freshRows[0];
+        momoResult = await createMomoPaymentInstruction(payment);
+      }
+
+      providerPayload = momoResult;
       payment = (await updatePaymentProviderFields(payment.payment_code, {
         qr_payload:       providerPayload.qr_payload,
         gateway_response: {
