@@ -38,7 +38,7 @@ const requestJson = (targetUrl, payload) =>
           'Content-Type':   'application/json',
           'Content-Length': Buffer.byteLength(data),
         },
-        timeout: 10000,
+        timeout: 10000, // 10s — fail fast thay vì đợi 30s rồi Render 502
       },
       (res) => {
         let body = '';
