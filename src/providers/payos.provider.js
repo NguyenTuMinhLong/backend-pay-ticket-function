@@ -104,12 +104,12 @@ const createPayosPaymentInstruction = async (payment) => {
     : undefined;
   const returnUrl = resolveUrl({
     providedUrl: config.payos.returnUrl,
-    fallbackPath: '/payments/return/success',
+    fallbackPath: '/payments/payos/return/success',
     paymentCode,
   });
   const cancelUrl = resolveUrl({
     providedUrl: config.payos.cancelUrl,
-    fallbackPath: '/payments/return/cancel',
+    fallbackPath: '/payments/payos/return/cancel',
     paymentCode,
   });
 
@@ -167,6 +167,11 @@ const verifyPayosWebhookData = async (payload = {}) => {
   return payos.webhooks.verify(payload);
 };
 
+const getPayosPaymentLink = async (orderCode) => {
+  const payos = getPayosClient();
+  return payos.paymentRequests.get(Number(orderCode));
+};
+
 const cancelPayosPaymentLink = async (orderCode, cancellationReason = 'Cancelled by backend') => {
   const payos = getPayosClient();
   return payos.paymentRequests.cancel(Number(orderCode), cancellationReason);
@@ -175,5 +180,6 @@ const cancelPayosPaymentLink = async (orderCode, cancellationReason = 'Cancelled
 module.exports = {
   createPayosPaymentInstruction,
   verifyPayosWebhookData,
+  getPayosPaymentLink,
   cancelPayosPaymentLink,
 };

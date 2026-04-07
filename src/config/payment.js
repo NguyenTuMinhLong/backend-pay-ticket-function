@@ -40,6 +40,7 @@ const paymentConfig = {
     partnerCode:   process.env.PAYOS_PARTNER_CODE   || '',
     baseUrl:       process.env.PAYOS_BASE_URL       || '',
     publicBaseUrl,
+    frontendUrl,
     returnUrl:     process.env.PAYOS_RETURN_URL     || '',
     cancelUrl:     process.env.PAYOS_CANCEL_URL     || '',
     webhookUrl:    process.env.PAYOS_WEBHOOK_URL    || '',

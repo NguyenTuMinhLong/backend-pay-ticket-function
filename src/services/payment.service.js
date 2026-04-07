@@ -6,6 +6,7 @@ const { createBankQrInstruction }   = require('../providers/bankqr.provider');
 const {
   createPayosPaymentInstruction,
   verifyPayosWebhookData,
+  getPayosPaymentLink,
   cancelPayosPaymentLink,
 } = require('../providers/payos.provider');
 
@@ -571,6 +572,190 @@ const handleMomoReturn = async (query = {}) => {
 
 // ── PayPal return/cancel ──────────────────────────────────────────────────────
 
+const getBookingCodeForPayment = async (payment) => {
+  if (!payment || !payment.booking_id) return '';
+
+  const { rows } = await db.query(
+    `select booking_code from bookings where id = $1 limit 1`,
+    [payment.booking_id]
+  );
+  return rows[0]?.booking_code || '';
+};
+
+const buildPayosFrontendRedirect = async ({
+  payment,
+  status,
+  orderCode = '',
+  paymentLinkId = '',
+  message = '',
+}) => {
+  let bookingCode = '';
+
+  try {
+    bookingCode = await getBookingCodeForPayment(payment);
+  } catch (_) {}
+
+  const params = new URLSearchParams();
+  params.set('status', status);
+  params.set('paymentCode', payment?.payment_code || '');
+  params.set('orderCode', orderCode || '');
+  params.set('paymentLinkId', paymentLinkId || '');
+  params.set('message', message || '');
+  if (bookingCode) params.set('bookingCode', bookingCode);
+
+  if (config.payos.frontendUrl) {
+    return { redirect: `${config.payos.frontendUrl}/payment/payos/result?${params.toString()}` };
+  }
+
+  return {
+    redirect: null,
+    status,
+    payment_code: payment?.payment_code || '',
+    booking_code: bookingCode,
+    order_code: orderCode,
+    payment_link_id: paymentLinkId,
+    message,
+  };
+};
+
+const handlePayosReturn = async (returnStatus = 'success', query = {}) => {
+  const paymentCode = String(query.payment_code || query.paymentCode || '').trim();
+  const normalizedReturnStatus = String(returnStatus || '').toLowerCase();
+
+  if (!paymentCode) {
+    return buildPayosFrontendRedirect({
+      payment: null,
+      status: 'error',
+      message: 'Missing payment code',
+    });
+  }
+
+  const payment = await getPaymentByCodeRow(paymentCode);
+  if (!payment) {
+    return buildPayosFrontendRedirect({
+      payment: { payment_code: paymentCode },
+      status: 'error',
+      message: 'Payment not found',
+    });
+  }
+
+  const gatewayResp = payment.gateway_response || {};
+  const orderCode = String(gatewayResp.order_code || query.orderCode || '');
+  const paymentLinkId = String(gatewayResp.payment_link_id || query.id || '');
+
+  if (isTerminalPaidStatus(payment.status)) {
+    return buildPayosFrontendRedirect({
+      payment,
+      status: 'success',
+      orderCode,
+      paymentLinkId,
+      message: 'Already processed',
+    });
+  }
+
+  if (normalizedReturnStatus === 'cancel') {
+    const cancelledPayment = isTerminalCancelledStatus(payment.status)
+      ? payment
+      : await cancelPayment({ payment_code: payment.payment_code });
+
+    return buildPayosFrontendRedirect({
+      payment: cancelledPayment,
+      status: 'cancel',
+      orderCode,
+      paymentLinkId,
+      message: 'Buyer cancelled payOS checkout',
+    });
+  }
+
+  if (!orderCode) {
+    return buildPayosFrontendRedirect({
+      payment,
+      status: 'error',
+      paymentLinkId,
+      message: 'Missing payOS order code',
+    });
+  }
+
+  let paymentLink;
+  try {
+    paymentLink = await getPayosPaymentLink(orderCode);
+  } catch (error) {
+    return buildPayosFrontendRedirect({
+      payment,
+      status: 'pending',
+      orderCode,
+      paymentLinkId,
+      message: error?.message || 'Waiting for payOS confirmation',
+    });
+  }
+
+  const payosStatus = String(paymentLink.status || '').toUpperCase();
+  const latestPaymentLinkId = paymentLink.id || paymentLinkId;
+
+  if (payosStatus === 'PAID') {
+    const expectedAmount = Number(payment.final_amount || payment.amount || 0);
+    const paidAmount = Number(paymentLink.amountPaid || paymentLink.amount || 0);
+    if (paidAmount !== expectedAmount) {
+      return buildPayosFrontendRedirect({
+        payment,
+        status: 'error',
+        orderCode,
+        paymentLinkId: latestPaymentLinkId,
+        message: `Amount mismatch. Expected ${expectedAmount} but received ${paidAmount}`,
+      });
+    }
+
+    const transaction = Array.isArray(paymentLink.transactions)
+      ? paymentLink.transactions[0]
+      : null;
+
+    const confirmed = await confirmPayment({
+      payment_code: payment.payment_code,
+      success: true,
+      gateway_transaction_id: transaction?.reference || latestPaymentLinkId || `PAYOS-${Date.now()}`,
+      gateway_response: {
+        provider: 'PAYOS',
+        source: 'return',
+        order_code: orderCode,
+        payment_link_id: latestPaymentLinkId,
+        payment_link: paymentLink,
+        raw_payload: query,
+        received_at: new Date().toISOString(),
+      },
+    });
+
+    return buildPayosFrontendRedirect({
+      payment: confirmed,
+      status: 'success',
+      orderCode,
+      paymentLinkId: latestPaymentLinkId,
+      message: 'Success',
+    });
+  }
+
+  if (['CANCELLED', 'FAILED', 'EXPIRED'].includes(payosStatus)) {
+    const cancelledPayment = isTerminalCancelledStatus(payment.status)
+      ? payment
+      : await cancelPayment({ payment_code: payment.payment_code });
+
+    return buildPayosFrontendRedirect({
+      payment: cancelledPayment,
+      status: payosStatus === 'CANCELLED' ? 'cancel' : 'error',
+      orderCode,
+      paymentLinkId: latestPaymentLinkId,
+      message: `payOS status: ${payosStatus}`,
+    });
+  }
+
+  return buildPayosFrontendRedirect({
+    payment,
+    status: 'pending',
+    orderCode,
+    paymentLinkId: latestPaymentLinkId,
+    message: `payOS status: ${payosStatus || 'PENDING'}`,
+  });
+};
+
 const buildPaypalFrontendRedirect = async ({ payment, status, orderId = '', captureId = '', message = '' }) => {
   let bookingCode = '';
 
@@ -781,6 +966,7 @@ module.exports = {
   cancelPayment,
   handleBankWebhook,
   handlePayosWebhook,
+  handlePayosReturn,
   handleMomoIpn,
   handleMomoReturn,
   handlePaypalReturn,
