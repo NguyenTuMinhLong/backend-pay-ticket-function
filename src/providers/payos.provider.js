@@ -9,6 +9,11 @@ const getRequiredConfig = (name, value) => {
   return value;
 };
 
+const optionalConfig = (value) => {
+  const normalized = String(value || '').trim();
+  return normalized || null;
+};
+
 const getPayosClient = () => {
   if (!config.payos.enabled) {
     throw new HttpError(
@@ -22,8 +27,8 @@ const getPayosClient = () => {
       clientId: getRequiredConfig('PAYOS_CLIENT_ID', config.payos.clientId),
       apiKey: getRequiredConfig('PAYOS_API_KEY', config.payos.apiKey),
       checksumKey: getRequiredConfig('PAYOS_CHECKSUM_KEY', config.payos.checksumKey),
-      partnerCode: config.payos.partnerCode || undefined,
-      baseURL: config.payos.baseUrl || undefined,
+      partnerCode: optionalConfig(config.payos.partnerCode),
+      baseURL: optionalConfig(config.payos.baseUrl),
     });
   }
 
@@ -31,12 +36,24 @@ const getPayosClient = () => {
 };
 
 const resolveOrderCode = (payment) => {
+  const existingOrderCode = Number(payment.gateway_response && payment.gateway_response.order_code);
+  if (Number.isSafeInteger(existingOrderCode) && existingOrderCode > 0) return existingOrderCode;
+
   // Thử dùng payment.id nếu là số nguyên (PostgreSQL serial/bigserial)
   const byId = Number(payment.id);
   if (Number.isSafeInteger(byId) && byId > 0) return byId;
 
   // Nếu id là UUID → lấy phần số trong payment_code (tối đa 13 chữ số để tránh overflow)
-  const digits = String(payment.payment_code || '').replace(/\D/g, '');
+  const paymentCode = String(payment.payment_code || '');
+  const codeMatch = paymentCode.match(/^PAY-(\d{14})-([A-Fa-f0-9]{6})$/);
+  if (codeMatch) {
+    const datePart = codeMatch[1].slice(2);
+    const suffixPart = String(Number.parseInt(codeMatch[2], 16) % 1000).padStart(3, '0');
+    const byPaymentCode = Number(`${datePart}${suffixPart}`);
+    if (Number.isSafeInteger(byPaymentCode) && byPaymentCode > 0) return byPaymentCode;
+  }
+
+  const digits = paymentCode.replace(/\D/g, '');
   if (digits.length > 0) {
     const trimmed = Number(digits.length > 13 ? digits.slice(0, 13) : digits);
     if (Number.isSafeInteger(trimmed) && trimmed > 0) return trimmed;

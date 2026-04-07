@@ -58,8 +58,20 @@ const getPaymentByCodeRow = async (paymentCode) => {
 
 const getPaymentByIdRow = async (id) => {
   const { rows } = await db.query(
-    'select * from payments where id = $1 limit 1',
-    [id]
+    'select * from payments where id::text = $1 limit 1',
+    [String(id)]
+  );
+  return rows[0] || null;
+};
+
+const getPaymentByPayosOrderCode = async (orderCode) => {
+  const { rows } = await db.query(
+    `select * from payments
+     where gateway_response ->> 'provider' = 'PAYOS'
+       and gateway_response ->> 'order_code' = $1
+     order by created_at desc
+     limit 1`,
+    [String(orderCode)]
   );
   return rows[0] || null;
 };
@@ -400,6 +412,7 @@ const handlePayosWebhook = async (payload = {}) => {
   const webhookData = await verifyPayosWebhookData(payload);
   const payment =
     await getPaymentByIdRow(webhookData.orderCode) ||
+    await getPaymentByPayosOrderCode(webhookData.orderCode) ||
     await getPaymentByCodeRow(String(webhookData.description || '').trim());
   if (!payment) throw new HttpError(404, 'Payment not found');
 
