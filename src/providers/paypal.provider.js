@@ -183,7 +183,7 @@ const createPayPalOrder = async (payment) => {
       purchase_units: [
         {
           reference_id: paymentCode,
-          invoice_id: paymentCode,
+          invoice_id: `${paymentCode}-${Date.now()}`.slice(0, 127),
           description: `Booking ${paymentCode}`.slice(0, 127),
           amount: {
             currency_code: currency,
