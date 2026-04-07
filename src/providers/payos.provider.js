@@ -14,6 +14,19 @@ const optionalConfig = (value) => {
   return normalized || null;
 };
 
+const optionalPayosBaseUrl = (value) => {
+  const normalized = optionalConfig(value);
+  if (!normalized) return null;
+
+  try {
+    const url = new URL(normalized);
+    if (url.hostname !== 'api-merchant.payos.vn') return null;
+    return url.origin;
+  } catch (_) {
+    return null;
+  }
+};
+
 const getPayosClient = () => {
   if (!config.payos.enabled) {
     throw new HttpError(
@@ -28,7 +41,7 @@ const getPayosClient = () => {
       apiKey: getRequiredConfig('PAYOS_API_KEY', config.payos.apiKey),
       checksumKey: getRequiredConfig('PAYOS_CHECKSUM_KEY', config.payos.checksumKey),
       partnerCode: optionalConfig(config.payos.partnerCode),
-      baseURL: optionalConfig(config.payos.baseUrl),
+      baseURL: optionalPayosBaseUrl(config.payos.baseUrl),
     });
   }
 
