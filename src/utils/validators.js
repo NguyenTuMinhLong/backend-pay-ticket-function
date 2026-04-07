@@ -11,7 +11,7 @@ const requireFields = (payload, fields) => {
 const validateInitPayload = (payload) => {
   requireFields(payload, ['booking_id', 'email', 'phone', 'payment_method']);
   const method  = String(payload.payment_method).toUpperCase();
-  const allowed = ['MOMO', 'BANK_QR'];
+  const allowed = ['MOMO', 'BANK_QR', 'PAYPAL'];
 
   if (!allowed.includes(method)) {
     throw new HttpError(400, `payment_method must be one of: ${allowed.join(', ')}`);

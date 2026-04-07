@@ -127,9 +127,99 @@ const handleMomoReturn = async (req, res, next) => {
   }
 };
 
+const handlePaypalReturn = async (req, res, next) => {
+  try {
+    const result = await paymentService.handlePaypalReturn(req.query || {});
+
+    if (result.redirect) {
+      return res.redirect(302, result.redirect);
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kết quả thanh toán PayPal</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; display: flex;
+           align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { width: calc(100% - 32px); max-width: 520px; background: #fff;
+            border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.12); padding: 32px; text-align: center; }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    p  { color: #475569; line-height: 1.6; margin: 8px 0; }
+    .code { font-weight: 700; color: #1d4ed8; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>${result.status === 'success' ? 'Thanh toán PayPal thành công' : 'Thanh toán PayPal thất bại'}</h2>
+    ${result.booking_code ? `<p>Mã booking: <span class="code">${result.booking_code}</span></p>` : ''}
+    ${result.payment_code ? `<p>Mã thanh toán: <span class="code">${result.payment_code}</span></p>` : ''}
+    ${result.order_id ? `<p>Order ID: <span class="code">${result.order_id}</span></p>` : ''}
+    ${result.capture_id ? `<p>Capture ID: <span class="code">${result.capture_id}</span></p>` : ''}
+    ${result.message ? `<p>${result.message}</p>` : ''}
+  </div>
+</body>
+</html>`);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const handlePaypalCancel = async (req, res, next) => {
+  try {
+    const result = await paymentService.handlePaypalCancel(req.query || {});
+
+    if (result.redirect) {
+      return res.redirect(302, result.redirect);
+    }
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(`<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đã hủy thanh toán PayPal</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f8fafc; display: flex;
+           align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+    .card { width: calc(100% - 32px); max-width: 520px; background: #fff;
+            border-radius: 16px; box-shadow: 0 16px 40px rgba(0,0,0,.12); padding: 32px; text-align: center; }
+    h2 { margin: 0 0 12px; font-size: 22px; }
+    p  { color: #475569; line-height: 1.6; margin: 8px 0; }
+    .code { font-weight: 700; color: #1d4ed8; font-size: 18px; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>Đã hủy thanh toán PayPal</h2>
+    ${result.booking_code ? `<p>Mã booking: <span class="code">${result.booking_code}</span></p>` : ''}
+    ${result.payment_code ? `<p>Mã thanh toán: <span class="code">${result.payment_code}</span></p>` : ''}
+    ${result.order_id ? `<p>Order ID: <span class="code">${result.order_id}</span></p>` : ''}
+    ${result.message ? `<p>${result.message}</p>` : ''}
+  </div>
+</body>
+</html>`);
+  } catch (error) {
+    next(error);
+  }
+};
+
 const redirectToPayosCheckout = async (req, res, next) => {
   try {
     const redirectUrl = await paymentService.getPayosCheckoutUrl(req.params.paymentCode);
+    res.redirect(302, redirectUrl);
+  } catch (error) {
+    next(error);
+  }
+};
+
+const redirectToPaypalCheckout = async (req, res, next) => {
+  try {
+    const redirectUrl = await paymentService.getPaypalCheckoutUrl(req.params.paymentCode);
     res.redirect(302, redirectUrl);
   } catch (error) {
     next(error);
@@ -187,6 +277,9 @@ module.exports = {
   handlePayosWebhook,
   handleMomoIpn,
   handleMomoReturn,
+  handlePaypalReturn,
+  handlePaypalCancel,
   redirectToPayosCheckout,
+  redirectToPaypalCheckout,
   renderPaymentReturnPage,
 };

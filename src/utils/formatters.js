@@ -7,7 +7,7 @@ const formatCurrencyVnd = (amount) => {
   }).format(numeric);
 };
 
-const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, payosConfig, momoConfig }) => {
+const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, payosConfig, momoConfig, paypalConfig }) => {
   const method          = String(payment.payment_method || payment.method || '').toUpperCase();
   const gatewayResponse = payment.gateway_response || {};
 
@@ -19,6 +19,10 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, pa
   const momoPayload = providerPayload.provider === 'MOMO'
     ? providerPayload
     : gatewayResponse.provider === 'MOMO' ? gatewayResponse : {};
+
+  const paypalPayload = providerPayload.provider === 'PAYPAL'
+    ? providerPayload
+    : gatewayResponse.provider === 'PAYPAL' ? gatewayResponse : {};
 
   // Kiểm tra MoMo trước — ưu tiên providerPayload.provider hơn DB method
   // để tránh sai khi existing payment trong DB có payment_method khác (e.g. BANK_QR)
@@ -57,6 +61,24 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, pa
       description:     payosPayload.description || payment.payment_code || null,
       note:            'Frontend redirect user sang redirect_url để vào trang thanh toán payOS.',
       auto_confirm_ready:   true,
+    };
+  }
+
+  if (method === 'PAYPAL' || paypalPayload.provider === 'PAYPAL') {
+    return {
+      type:         'PAYPAL',
+      provider:     'PAYPAL',
+      order_id:     paypalPayload.order_id || null,
+      status:       paypalPayload.status || null,
+      approve_url:  paypalPayload.approve_url || null,
+      redirect_url: paypalPayload.redirect_url || paypalPayload.approve_url || null,
+      return_url:   paypalPayload.return_url || (paypalConfig && paypalConfig.returnUrl) || null,
+      cancel_url:   paypalPayload.cancel_url || (paypalConfig && paypalConfig.cancelUrl) || null,
+      currency:     paypalPayload.currency_code || (paypalConfig && paypalConfig.currency) || payment.currency || null,
+      amount:       paypalPayload.amount || payment.final_amount || payment.amount || null,
+      environment:  paypalPayload.environment || (paypalConfig && paypalConfig.env) || null,
+      auto_confirm_ready: true,
+      note: 'Frontend redirect user sang approve_url để thanh toán PayPal sandbox.',
     };
   }
 

@@ -72,6 +72,24 @@ const paymentConfig = {
     lang:         process.env.MOMO_LANG          || 'vi',
   },
 
+  paypal: {
+    enabled:
+      process.env.PAYPAL_ENABLED !== 'false' &&
+      Boolean(process.env.PAYPAL_CLIENT_ID && process.env.PAYPAL_CLIENT_SECRET),
+    env:          process.env.PAYPAL_ENV === 'production' ? 'production' : 'sandbox',
+    clientId:     process.env.PAYPAL_CLIENT_ID      || '',
+    clientSecret: process.env.PAYPAL_CLIENT_SECRET  || '',
+    publicBaseUrl,
+    frontendUrl,
+    returnPath:   process.env.PAYPAL_RETURN_PATH    || '/payments/paypal/return',
+    cancelPath:   process.env.PAYPAL_CANCEL_PATH    || '/payments/paypal/cancel',
+    returnUrl:    process.env.PAYPAL_RETURN_URL     || '',
+    cancelUrl:    process.env.PAYPAL_CANCEL_URL     || '',
+    currency:     process.env.PAYPAL_CURRENCY       || 'VND',
+    convertRate:  parseFloatSafe(process.env.PAYPAL_CONVERT_RATE, 1),
+    brandName:    process.env.PAYPAL_BRAND_NAME     || 'Vivudee',
+  },
+
   payment: {
     expiresInMinutes: parseIntSafe(process.env.PAYMENT_EXPIRES_IN_MINUTES, 15),
   },
@@ -94,6 +112,12 @@ if (!paymentConfig.momo.redirectUrl && paymentConfig.momo.publicBaseUrl) {
 }
 if (!paymentConfig.momo.ipnUrl && paymentConfig.momo.publicBaseUrl) {
   paymentConfig.momo.ipnUrl = `${paymentConfig.momo.publicBaseUrl}${paymentConfig.momo.ipnPath}`;
+}
+if (!paymentConfig.paypal.returnUrl && paymentConfig.paypal.publicBaseUrl) {
+  paymentConfig.paypal.returnUrl = `${paymentConfig.paypal.publicBaseUrl}${paymentConfig.paypal.returnPath}`;
+}
+if (!paymentConfig.paypal.cancelUrl && paymentConfig.paypal.publicBaseUrl) {
+  paymentConfig.paypal.cancelUrl = `${paymentConfig.paypal.publicBaseUrl}${paymentConfig.paypal.cancelPath}`;
 }
 
 module.exports = paymentConfig;

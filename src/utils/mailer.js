@@ -6,6 +6,11 @@ const formatCurrency = (value) => {
   return `${amount.toLocaleString('en-US')} VND`;
 };
 
+const formatAmountWithCurrency = (value, currency = 'VND') => {
+  const amount = Number(value || 0);
+  return `${amount.toLocaleString('en-US')} ${String(currency || 'VND').toUpperCase()}`;
+};
+
 const formatDateTime = (value) => {
   if (!value) return '';
   const date = new Date(value);
@@ -99,6 +104,22 @@ const buildInstructionBlock = ({ payment, instruction }) => {
                </div>`
             : ''
         }
+      </div>
+    `;
+  }
+
+  if (instruction.type === 'PAYPAL') {
+    const approveUrl = instruction.redirect_url || instruction.approve_url || '';
+    const currency = instruction.currency || 'VND';
+
+    return `
+      <div style="background:#fff7ed;padding:16px;border-radius:12px;margin-top:16px;border:1px solid #fed7aa;">
+        <p style="margin:0 0 10px;"><strong>Method:</strong> PayPal</p>
+        <p style="margin:0 0 10px;"><strong>Amount:</strong> ${escapeHtml(formatAmountWithCurrency(amount, currency))}</p>
+        <p style="margin:0 0 10px;"><strong>Payment Code:</strong> ${escapeHtml(payment.payment_code)}</p>
+        ${instruction.order_id ? `<p style="margin:0 0 10px;"><strong>Order ID:</strong> ${escapeHtml(instruction.order_id)}</p>` : ''}
+        ${instruction.currency ? `<p style="margin:0 0 10px;"><strong>Currency:</strong> ${escapeHtml(currency)}</p>` : ''}
+        ${approveUrl ? `<p style="margin:0 0 10px;"><strong>Checkout URL:</strong> <a href="${escapeHtml(approveUrl)}">Open PayPal checkout</a></p>` : ''}
       </div>
     `;
   }
@@ -218,6 +239,14 @@ const buildPaymentPendingEmailText = ({ payment, instruction }) => {
       if (instruction.deeplink) lines.push(`Deep Link: ${instruction.deeplink}`);
       if (instruction.qr_code_url || instruction.qr_payload) {
         lines.push(`QR Code: ${instruction.qr_code_url || instruction.qr_payload}`);
+      }
+    } else if (instruction.type === 'PAYPAL') {
+      lines.push('Provider: PayPal');
+      lines.push(`Payment Code: ${payment.payment_code}`);
+      if (instruction.order_id) lines.push(`Order ID: ${instruction.order_id}`);
+      if (instruction.currency) lines.push(`Currency: ${instruction.currency}`);
+      if (instruction.redirect_url || instruction.approve_url) {
+        lines.push(`Checkout URL: ${instruction.redirect_url || instruction.approve_url}`);
       }
     } else if (instruction.type === 'PAYOS_CHECKOUT') {
       lines.push('Provider: payOS');

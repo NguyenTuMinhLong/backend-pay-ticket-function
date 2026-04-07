@@ -14,9 +14,12 @@ router.post('/momo/ipn',       paymentController.handleMomoIpn);
 // Return: MoMo redirect user về đây sau khi thanh toán xong
 // → backend redirect tiếp về FRONTEND /payment/momo/result
 router.get('/momo/return',     paymentController.handleMomoReturn);
+router.get('/paypal/return',   paymentController.handlePaypalReturn);
+router.get('/paypal/cancel',   paymentController.handlePaypalCancel);
 
 router.get('/return/:status',  paymentController.renderPaymentReturnPage);
 router.get('/:paymentCode/payos/checkout', paymentController.redirectToPayosCheckout);
+router.get('/:paymentCode/paypal/checkout', paymentController.redirectToPaypalCheckout);
 router.get('/:paymentCode',    paymentController.getPaymentByCode);
 
 module.exports = router;

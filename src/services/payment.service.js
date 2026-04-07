@@ -17,6 +17,11 @@ const {
   normalizeAmount,
   isMomoCancelResult,
 } = require('../providers/momo.provider');
+const {
+  createPayPalOrder,
+  capturePayPalOrder,
+  getFrontendResultBaseUrl,
+} = require('../providers/paypal.provider');
 
 const { sendPaymentPendingEmail, sendTicketIssuedEmail } = require('./email.service');
 const ticketService = require('./ticket.service');
@@ -39,6 +44,7 @@ const mapPayment = (payment, providerPayload = {}) => ({
     bankConfig:  config.bankQr,
     payosConfig: config.payos,
     momoConfig:  config.momo,
+    paypalConfig: config.paypal,
   }),
 });
 
@@ -54,6 +60,17 @@ const getPaymentByIdRow = async (id) => {
   const { rows } = await db.query(
     'select * from payments where id = $1 limit 1',
     [id]
+  );
+  return rows[0] || null;
+};
+
+const getPaymentByGatewayOrderId = async (orderId) => {
+  const { rows } = await db.query(
+    `select * from payments
+     where gateway_response ->> 'order_id' = $1
+     order by created_at desc
+     limit 1`,
+    [orderId]
   );
   return rows[0] || null;
 };
@@ -263,6 +280,28 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
           ...providerPayload,
           provider:    'MOMO',
           mode:        'gateway_redirect',
+          generatedAt: new Date().toISOString(),
+        },
+      })) || payment;
+    }
+  }
+
+  if (payment_method === 'PAYPAL') {
+    if (!config.paypal.enabled) {
+      throw new HttpError(400, 'PayPal payment is not configured on this server');
+    }
+
+    const existingGw = payment.gateway_response || {};
+
+    if (existingGw.provider === 'PAYPAL' && existingGw.order_id && existingGw.approve_url) {
+      providerPayload = existingGw;
+    } else {
+      providerPayload = await createPayPalOrder(payment);
+      payment = (await updatePaymentProviderFields(payment.payment_code, {
+        gateway_response: {
+          ...providerPayload,
+          provider: 'PAYPAL',
+          mode: 'redirect_checkout',
           generatedAt: new Date().toISOString(),
         },
       })) || payment;
@@ -517,6 +556,140 @@ const handleMomoReturn = async (query = {}) => {
   };
 };
 
+// ── PayPal return/cancel ──────────────────────────────────────────────────────
+
+const buildPaypalFrontendRedirect = async ({ payment, status, orderId = '', captureId = '', message = '' }) => {
+  let bookingCode = '';
+
+  try {
+    if (payment && payment.booking_id) {
+      const { rows } = await db.query(
+        `select booking_code from bookings where id = $1 limit 1`,
+        [payment.booking_id]
+      );
+      if (rows[0]) bookingCode = rows[0].booking_code;
+    }
+  } catch (_) {}
+
+  const params = new URLSearchParams();
+  params.set('status', status);
+  params.set('paymentCode', payment?.payment_code || '');
+  params.set('orderId', orderId || '');
+  params.set('captureId', captureId || '');
+  params.set('message', message || '');
+  if (bookingCode) params.set('bookingCode', bookingCode);
+
+  const frontendBaseUrl = getFrontendResultBaseUrl();
+  if (frontendBaseUrl) {
+    return { redirect: `${frontendBaseUrl}?${params.toString()}` };
+  }
+
+  return {
+    redirect: null,
+    status,
+    payment_code: payment?.payment_code || '',
+    booking_code: bookingCode,
+    order_id: orderId,
+    capture_id: captureId,
+    message,
+  };
+};
+
+const handlePaypalReturn = async (query = {}) => {
+  const orderId = String(query.token || query.orderId || '').trim();
+  const paymentCode = String(query.payment_code || '').trim();
+
+  if (!orderId) {
+    return buildPaypalFrontendRedirect({
+      payment: paymentCode ? await getPaymentByCodeRow(paymentCode).catch(() => null) : null,
+      status: 'error',
+      message: 'Missing PayPal order token',
+    });
+  }
+
+  const payment =
+    await getPaymentByGatewayOrderId(orderId) ||
+    (paymentCode ? await getPaymentByCodeRow(paymentCode) : null);
+
+  if (!payment) {
+    return {
+      redirect: null,
+      status: 'error',
+      payment_code: paymentCode,
+      booking_code: '',
+      order_id: orderId,
+      capture_id: '',
+      message: 'Payment not found',
+    };
+  }
+
+  if (isTerminalPaidStatus(payment.status)) {
+    return buildPaypalFrontendRedirect({
+      payment,
+      status: 'success',
+      orderId,
+      captureId: payment.gateway_transaction_id || '',
+      message: 'Already processed',
+    });
+  }
+
+  const capture = await capturePayPalOrder(orderId);
+  const purchaseUnit = Array.isArray(capture.purchase_units) ? capture.purchase_units[0] : null;
+  const payments = purchaseUnit && purchaseUnit.payments ? purchaseUnit.payments : {};
+  const captureItem = Array.isArray(payments.captures) ? payments.captures[0] : null;
+
+  if (!captureItem || String(captureItem.status || '').toUpperCase() !== 'COMPLETED') {
+    return buildPaypalFrontendRedirect({
+      payment,
+      status: 'error',
+      orderId,
+      message: capture.message || 'PayPal capture did not complete',
+    });
+  }
+
+  const confirmed = await confirmPayment({
+    payment_code: payment.payment_code,
+    success: true,
+    gateway_transaction_id: captureItem.id || `PAYPAL-${Date.now()}`,
+    gateway_response: {
+      provider: 'PAYPAL',
+      source: 'return',
+      order_id: orderId,
+      capture_id: captureItem.id || null,
+      raw_payload: capture,
+      received_at: new Date().toISOString(),
+    },
+  });
+
+  return buildPaypalFrontendRedirect({
+    payment: confirmed,
+    status: 'success',
+    orderId,
+    captureId: captureItem.id || '',
+    message: 'Success',
+  });
+};
+
+const handlePaypalCancel = async (query = {}) => {
+  const orderId = String(query.token || query.orderId || '').trim();
+  const paymentCode = String(query.payment_code || '').trim();
+  const payment =
+    (orderId ? await getPaymentByGatewayOrderId(orderId) : null) ||
+    (paymentCode ? await getPaymentByCodeRow(paymentCode) : null);
+
+  let cancelledPayment = payment;
+  if (payment && !isTerminalCancelledStatus(payment.status) && !isTerminalPaidStatus(payment.status)) {
+    cancelledPayment = await cancelPayment({ payment_code: payment.payment_code });
+  }
+
+  return buildPaypalFrontendRedirect({
+    payment: cancelledPayment,
+    status: 'cancel',
+    orderId,
+    message: 'Buyer cancelled PayPal checkout',
+  });
+};
+
 // ── getPayosCheckoutUrl ───────────────────────────────────────────────────────
 
 const getPayosCheckoutUrl = async (paymentCode) => {
@@ -554,6 +727,38 @@ const getPayosCheckoutUrl = async (paymentCode) => {
   return checkout.checkout_url;
 };
 
+const getPaypalCheckoutUrl = async (paymentCode) => {
+  const payment = await getPaymentByCodeRow(paymentCode);
+  if (!payment) throw new HttpError(404, 'Payment not found');
+
+  if (String(payment.payment_method).toUpperCase() !== 'PAYPAL') {
+    throw new HttpError(400, 'PayPal checkout is only enabled for PAYPAL payments');
+  }
+
+  const gatewayResp = payment.gateway_response || {};
+
+  if (gatewayResp.provider === 'PAYPAL' && gatewayResp.approve_url) {
+    return gatewayResp.approve_url;
+  }
+
+  if (!config.paypal.enabled) {
+    throw new HttpError(400, 'PayPal payment is not configured on this server');
+  }
+
+  const checkout = await createPayPalOrder(payment);
+  await updatePaymentProviderFields(payment.payment_code, {
+    gateway_response: {
+      ...gatewayResp,
+      ...checkout,
+      provider: 'PAYPAL',
+      mode: 'redirect_checkout',
+      generatedAt: new Date().toISOString(),
+    },
+  }).catch(() => null);
+
+  return checkout.approve_url;
+};
+
 // ── exports ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -565,5 +770,8 @@ module.exports = {
   handlePayosWebhook,
   handleMomoIpn,
   handleMomoReturn,
+  handlePaypalReturn,
+  handlePaypalCancel,
   getPayosCheckoutUrl,
+  getPaypalCheckoutUrl,
 };

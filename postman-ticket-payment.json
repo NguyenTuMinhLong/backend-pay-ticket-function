@@ -45,6 +45,26 @@
       }
     },
     {
+      "name": "Init PAYPAL payment",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "url": {
+          "raw": "http://localhost:3000/payments/init",
+          "protocol": "http",
+          "host": ["localhost"],
+          "port": "3000",
+          "path": ["payments", "init"]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"booking_id\": 44,\n  \"email\": \"demo@example.com\",\n  \"phone\": \"0900000000\",\n  \"name\": \"Demo User\",\n  \"payment_method\": \"PAYPAL\"\n}"
+        }
+      }
+    },
+    {
       "name": "Confirm payment manually",
       "request": {
         "method": "POST",
