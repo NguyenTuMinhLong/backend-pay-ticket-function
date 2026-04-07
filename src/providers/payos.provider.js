@@ -31,18 +31,19 @@ const getPayosClient = () => {
 };
 
 const resolveOrderCode = (payment) => {
-  const candidates = [
-    Number(payment.id),
-    Number.parseInt(String(payment.payment_code || '').replace(/\D/g, ''), 10),
-  ];
+  // Thử dùng payment.id nếu là số nguyên (PostgreSQL serial/bigserial)
+  const byId = Number(payment.id);
+  if (Number.isSafeInteger(byId) && byId > 0) return byId;
 
-  for (const candidate of candidates) {
-    if (Number.isSafeInteger(candidate) && candidate > 0) {
-      return candidate;
-    }
+  // Nếu id là UUID → lấy phần số trong payment_code (tối đa 13 chữ số để tránh overflow)
+  const digits = String(payment.payment_code || '').replace(/\D/g, '');
+  if (digits.length > 0) {
+    const trimmed = Number(digits.length > 13 ? digits.slice(0, 13) : digits);
+    if (Number.isSafeInteger(trimmed) && trimmed > 0) return trimmed;
   }
 
-  throw new HttpError(500, 'Payment order code is invalid for payOS');
+  // Fallback cuối: dùng timestamp hiện tại (unique theo millisecond)
+  return Date.now();
 };
 
 const resolveDescription = (paymentCode) => {
