@@ -26,18 +26,24 @@ const paymentConfig = {
     template:      process.env.BANK_QR_TEMPLATE       || 'compact2',
   },
 
-  sepay: {
-    enabled:         process.env.SEPAY_ENABLED !== 'false' && Boolean(process.env.SEPAY_MERCHANT_ID && process.env.SEPAY_SECRET_KEY),
-    env:             process.env.SEPAY_ENV === 'production' ? 'production' : 'sandbox',
-    merchantId:      process.env.SEPAY_MERCHANT_ID       || '',
-    secretKey:       process.env.SEPAY_SECRET_KEY        || '',
-    checkoutVersion: process.env.SEPAY_CHECKOUT_VERSION  || 'v1',
-    paymentMethod:   process.env.SEPAY_PAYMENT_METHOD    || 'BANK_TRANSFER',
-    successUrl:      process.env.SEPAY_SUCCESS_URL       || '',
-    errorUrl:        process.env.SEPAY_ERROR_URL         || '',
-    cancelUrl:       process.env.SEPAY_CANCEL_URL        || '',
+  payos: {
+    enabled:
+      process.env.PAYOS_ENABLED !== 'false' &&
+      Boolean(
+        process.env.PAYOS_CLIENT_ID &&
+        process.env.PAYOS_API_KEY &&
+        process.env.PAYOS_CHECKSUM_KEY
+      ),
+    clientId:      process.env.PAYOS_CLIENT_ID      || '',
+    apiKey:        process.env.PAYOS_API_KEY        || '',
+    checksumKey:   process.env.PAYOS_CHECKSUM_KEY   || '',
+    partnerCode:   process.env.PAYOS_PARTNER_CODE   || '',
+    baseUrl:       process.env.PAYOS_BASE_URL       || '',
     publicBaseUrl,
-    ipnPath:         process.env.SEPAY_IPN_PATH          || '/payments/sepay/ipn',
+    returnUrl:     process.env.PAYOS_RETURN_URL     || '',
+    cancelUrl:     process.env.PAYOS_CANCEL_URL     || '',
+    webhookUrl:    process.env.PAYOS_WEBHOOK_URL    || '',
+    webhookPath:   process.env.PAYOS_WEBHOOK_PATH   || '/payments/payos/webhook',
   },
 
   // FIX: thêm đầy đủ momo config
@@ -78,9 +84,9 @@ const paymentConfig = {
   },
 };
 
-paymentConfig.sepay.ipnUrl = paymentConfig.sepay.publicBaseUrl
-  ? `${paymentConfig.sepay.publicBaseUrl}${paymentConfig.sepay.ipnPath}`
-  : '';
+if (!paymentConfig.payos.webhookUrl && paymentConfig.payos.publicBaseUrl) {
+  paymentConfig.payos.webhookUrl = `${paymentConfig.payos.publicBaseUrl}${paymentConfig.payos.webhookPath}`;
+}
 
 // Auto-build MoMo URLs từ publicBaseUrl nếu chưa set trong .env
 if (!paymentConfig.momo.redirectUrl && paymentConfig.momo.publicBaseUrl) {

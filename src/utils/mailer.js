@@ -103,6 +103,24 @@ const buildInstructionBlock = ({ payment, instruction }) => {
     `;
   }
 
+  if (instruction.type === 'PAYOS_CHECKOUT') {
+    const checkoutUrl = instruction.redirect_url || instruction.checkout_url || '';
+
+    return `
+      <div style="background:#eefbf3;padding:16px;border-radius:12px;margin-top:16px;border:1px solid #bbf7d0;">
+        <p style="margin:0 0 10px;"><strong>Method:</strong> payOS</p>
+        <p style="margin:0 0 10px;"><strong>Amount:</strong> ${escapeHtml(formatCurrency(amount))}</p>
+        <p style="margin:0 0 10px;"><strong>Payment Code:</strong> ${escapeHtml(payment.payment_code)}</p>
+        ${instruction.order_code ? `<p style="margin:0 0 10px;"><strong>Order Code:</strong> ${escapeHtml(String(instruction.order_code))}</p>` : ''}
+        ${instruction.bank_bin ? `<p style="margin:0 0 10px;"><strong>Bank BIN:</strong> ${escapeHtml(String(instruction.bank_bin))}</p>` : ''}
+        ${instruction.bank_account ? `<p style="margin:0 0 10px;"><strong>Account Number:</strong> ${escapeHtml(instruction.bank_account)}</p>` : ''}
+        ${instruction.account_name ? `<p style="margin:0 0 10px;"><strong>Account Name:</strong> ${escapeHtml(instruction.account_name)}</p>` : ''}
+        <p style="margin:0 0 10px;"><strong>Transfer Content:</strong> ${escapeHtml(instruction.description || payment.payment_code)}</p>
+        ${checkoutUrl ? `<p style="margin:0 0 10px;"><strong>Checkout URL:</strong> <a href="${escapeHtml(checkoutUrl)}">Open payOS checkout</a></p>` : ''}
+      </div>
+    `;
+  }
+
   const qrImageUrl = instruction.qr_image_url || instruction.qr_payload || '';
   const bankName = instruction.bank_name || config.bankQr.bankName || 'VietinBank';
   const accountName = instruction.account_name || config.bankQr.accountName || '';
@@ -200,6 +218,17 @@ const buildPaymentPendingEmailText = ({ payment, instruction }) => {
       if (instruction.deeplink) lines.push(`Deep Link: ${instruction.deeplink}`);
       if (instruction.qr_code_url || instruction.qr_payload) {
         lines.push(`QR Code: ${instruction.qr_code_url || instruction.qr_payload}`);
+      }
+    } else if (instruction.type === 'PAYOS_CHECKOUT') {
+      lines.push('Provider: payOS');
+      lines.push(`Payment Code: ${payment.payment_code}`);
+      if (instruction.order_code) lines.push(`Order Code: ${instruction.order_code}`);
+      if (instruction.bank_bin) lines.push(`Bank BIN: ${instruction.bank_bin}`);
+      if (instruction.bank_account) lines.push(`Account Number: ${instruction.bank_account}`);
+      if (instruction.account_name) lines.push(`Account Name: ${instruction.account_name}`);
+      lines.push(`Transfer Content: ${instruction.description || payment.payment_code}`);
+      if (instruction.redirect_url || instruction.checkout_url) {
+        lines.push(`Checkout URL: ${instruction.redirect_url || instruction.checkout_url}`);
       }
     } else {
       lines.push(`Bank: ${instruction.bank_name || config.bankQr.bankName || ''}`);

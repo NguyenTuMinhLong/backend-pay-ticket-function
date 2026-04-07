@@ -6,7 +6,7 @@ router.post('/init',           paymentController.initPayment);
 router.post('/confirm',        paymentController.confirmPayment);
 router.post('/cancel',         paymentController.cancelPayment);
 router.post('/webhook/bank',   paymentController.handleBankWebhook);
-router.post('/sepay/ipn',      paymentController.handleSepayIpn);
+router.post('/payos/webhook',  paymentController.handlePayosWebhook);
 
 // FIX: thêm MoMo routes
 // IPN: MoMo gọi server-to-server để xác nhận thanh toán
@@ -16,7 +16,7 @@ router.post('/momo/ipn',       paymentController.handleMomoIpn);
 router.get('/momo/return',     paymentController.handleMomoReturn);
 
 router.get('/return/:status',  paymentController.renderPaymentReturnPage);
-router.get('/:paymentCode/sepay/checkout', paymentController.redirectToSepayCheckout);
+router.get('/:paymentCode/payos/checkout', paymentController.redirectToPayosCheckout);
 router.get('/:paymentCode',    paymentController.getPaymentByCode);
 
 module.exports = router;

@@ -1,0 +1,161 @@
+const { PayOS } = require('@payos/node');
+const config = require('../config/payment');
+const HttpError = require('../utils/httpError');
+
+let payosClient = null;
+
+const getRequiredConfig = (name, value) => {
+  if (!value) throw new HttpError(500, `${name} is not configured`);
+  return value;
+};
+
+const getPayosClient = () => {
+  if (!config.payos.enabled) {
+    throw new HttpError(
+      500,
+      'payOS config is incomplete. Please set PAYOS_CLIENT_ID, PAYOS_API_KEY, and PAYOS_CHECKSUM_KEY.'
+    );
+  }
+
+  if (!payosClient) {
+    payosClient = new PayOS({
+      clientId: getRequiredConfig('PAYOS_CLIENT_ID', config.payos.clientId),
+      apiKey: getRequiredConfig('PAYOS_API_KEY', config.payos.apiKey),
+      checksumKey: getRequiredConfig('PAYOS_CHECKSUM_KEY', config.payos.checksumKey),
+      partnerCode: config.payos.partnerCode || undefined,
+      baseURL: config.payos.baseUrl || undefined,
+    });
+  }
+
+  return payosClient;
+};
+
+const resolveOrderCode = (payment) => {
+  const candidates = [
+    Number(payment.id),
+    Number.parseInt(String(payment.payment_code || '').replace(/\D/g, ''), 10),
+  ];
+
+  for (const candidate of candidates) {
+    if (Number.isSafeInteger(candidate) && candidate > 0) {
+      return candidate;
+    }
+  }
+
+  throw new HttpError(500, 'Payment order code is invalid for payOS');
+};
+
+const resolveDescription = (paymentCode) => {
+  const normalized = String(paymentCode || '')
+    .trim()
+    .replace(/[^A-Za-z0-9 _-]/g, '')
+    .slice(0, 25);
+
+  return normalized || 'PAYMENT';
+};
+
+const resolveUrl = ({ providedUrl, fallbackPath, paymentCode }) => {
+  if (providedUrl) {
+    return providedUrl;
+  }
+
+  if (!config.payos.publicBaseUrl || !fallbackPath) {
+    return '';
+  }
+
+  const separator = fallbackPath.includes('?') ? '&' : '?';
+  return `${config.payos.publicBaseUrl}${fallbackPath}${separator}payment_code=${encodeURIComponent(paymentCode)}`;
+};
+
+const createPayosPaymentInstruction = async (payment) => {
+  const payos = getPayosClient();
+  const amount = Math.round(Number(payment.final_amount || payment.amount || 0));
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new HttpError(400, 'payOS amount is invalid');
+  }
+
+  const paymentCode = String(payment.payment_code || '').trim();
+  if (!paymentCode) {
+    throw new HttpError(400, 'payment.payment_code is required');
+  }
+
+  const orderCode = resolveOrderCode(payment);
+  const expiresAt = payment.expires_at
+    ? Math.floor(new Date(payment.expires_at).getTime() / 1000)
+    : undefined;
+  const returnUrl = resolveUrl({
+    providedUrl: config.payos.returnUrl,
+    fallbackPath: '/payments/return/success',
+    paymentCode,
+  });
+  const cancelUrl = resolveUrl({
+    providedUrl: config.payos.cancelUrl,
+    fallbackPath: '/payments/return/cancel',
+    paymentCode,
+  });
+
+  if (!returnUrl || !cancelUrl) {
+    throw new HttpError(
+      500,
+      'payOS redirect URLs are incomplete. Please set PAYMENT_PUBLIC_BASE_URL or explicit PAYOS_RETURN_URL and PAYOS_CANCEL_URL.'
+    );
+  }
+
+  const response = await payos.paymentRequests.create({
+    orderCode,
+    amount,
+    description: resolveDescription(paymentCode),
+    returnUrl,
+    cancelUrl,
+    buyerName: payment.customer_name || undefined,
+    buyerEmail: payment.contact_email || undefined,
+    buyerPhone: payment.contact_phone || undefined,
+    expiredAt: Number.isFinite(expiresAt) && expiresAt > 0 ? expiresAt : undefined,
+    items: [
+      {
+        name: `Booking ${paymentCode}`.slice(0, 25),
+        quantity: 1,
+        price: amount,
+      },
+    ],
+  });
+
+  return {
+    provider: 'PAYOS',
+    order_code: response.orderCode,
+    payment_link_id: response.paymentLinkId,
+    checkout_url: response.checkoutUrl,
+    redirect_url: config.payos.publicBaseUrl
+      ? `${config.payos.publicBaseUrl}/payments/${encodeURIComponent(paymentCode)}/payos/checkout`
+      : response.checkoutUrl,
+    webhook_url: config.payos.webhookUrl || null,
+    return_url: returnUrl,
+    cancel_url: cancelUrl,
+    qr_code: response.qrCode || null,
+    qr_payload: response.qrCode || null,
+    description: response.description || paymentCode,
+    amount: response.amount,
+    currency: response.currency || 'VND',
+    bank_bin: response.bin || null,
+    bank_account: response.accountNumber || null,
+    account_name: response.accountName || null,
+    status: response.status || null,
+  };
+};
+
+const verifyPayosWebhookData = async (payload = {}) => {
+  const payos = getPayosClient();
+  return payos.webhooks.verify(payload);
+};
+
+const cancelPayosPaymentLink = async (orderCode, cancellationReason = 'Cancelled by backend') => {
+  const payos = getPayosClient();
+  return payos.paymentRequests.cancel(Number(orderCode), cancellationReason);
+};
+
+module.exports = {
+  createPayosPaymentInstruction,
+  verifyPayosWebhookData,
+  cancelPayosPaymentLink,
+};

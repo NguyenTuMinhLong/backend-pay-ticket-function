@@ -7,13 +7,13 @@ const formatCurrencyVnd = (amount) => {
   }).format(numeric);
 };
 
-const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, sepayConfig, momoConfig }) => {
+const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, payosConfig, momoConfig }) => {
   const method          = String(payment.payment_method || payment.method || '').toUpperCase();
   const gatewayResponse = payment.gateway_response || {};
 
-  const sepayPayload = providerPayload.provider === 'SEPAY'
+  const payosPayload = providerPayload.provider === 'PAYOS'
     ? providerPayload
-    : gatewayResponse.provider === 'SEPAY' ? gatewayResponse : {};
+    : gatewayResponse.provider === 'PAYOS' ? gatewayResponse : {};
 
   // FIX: đọc momo payload từ providerPayload hoặc gateway_response
   const momoPayload = providerPayload.provider === 'MOMO'
@@ -39,17 +39,23 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, se
     };
   }
 
-  if (method === 'BANK_QR' && sepayPayload.provider === 'SEPAY') {
+  if (method === 'BANK_QR' && payosPayload.provider === 'PAYOS') {
     return {
-      type:                 'SEPAY_CHECKOUT',
-      provider:             'SEPAY',
-      checkout_url:         sepayPayload.checkout_url         || null,
-      checkout_form_fields: sepayPayload.checkout_form_fields || null,
-      redirect_url:         sepayPayload.redirect_url         || null,
-      ipn_url:              sepayPayload.ipn_url || (sepayConfig && sepayConfig.ipnUrl) || null,
-      payment_method:       sepayPayload.payment_method || (sepayConfig && sepayConfig.paymentMethod) || 'BANK_TRANSFER',
-      order_invoice_number: sepayPayload.order_invoice_number || payment.payment_code || null,
-      note:                 'Frontend redirect user sang redirect_url để vào trang thanh toán SePay.',
+      type:            'PAYOS_CHECKOUT',
+      provider:        'PAYOS',
+      checkout_url:    payosPayload.checkout_url || null,
+      redirect_url:    payosPayload.redirect_url || payosPayload.checkout_url || null,
+      webhook_url:     payosPayload.webhook_url || (payosConfig && payosConfig.webhookUrl) || null,
+      return_url:      payosPayload.return_url || (payosConfig && payosConfig.returnUrl) || null,
+      cancel_url:      payosPayload.cancel_url || (payosConfig && payosConfig.cancelUrl) || null,
+      qr_code:         payosPayload.qr_code || null,
+      payment_link_id: payosPayload.payment_link_id || null,
+      order_code:      payosPayload.order_code || null,
+      bank_bin:        payosPayload.bank_bin || null,
+      bank_account:    payosPayload.bank_account || null,
+      account_name:    payosPayload.account_name || null,
+      description:     payosPayload.description || payment.payment_code || null,
+      note:            'Frontend redirect user sang redirect_url để vào trang thanh toán payOS.',
       auto_confirm_ready:   true,
     };
   }

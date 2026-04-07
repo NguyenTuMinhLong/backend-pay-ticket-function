@@ -3,7 +3,11 @@ const config = require('../config/payment');
 const HttpError = require('../utils/httpError');
 const { buildPaymentInstruction }   = require('../utils/formatters');
 const { createBankQrInstruction }   = require('../providers/bankqr.provider');
-const { createSepayCheckoutInstruction, buildAutoSubmitCheckoutHtml } = require('../providers/sepay.provider');
+const {
+  createPayosPaymentInstruction,
+  verifyPayosWebhookData,
+  cancelPayosPaymentLink,
+} = require('../providers/payos.provider');
 
 // FIX: import momo provider
 const {
@@ -33,7 +37,7 @@ const mapPayment = (payment, providerPayload = {}) => ({
     payment,
     providerPayload,
     bankConfig:  config.bankQr,
-    sepayConfig: config.sepay,
+    payosConfig: config.payos,
     momoConfig:  config.momo,
   }),
 });
@@ -42,6 +46,14 @@ const getPaymentByCodeRow = async (paymentCode) => {
   const { rows } = await db.query(
     'select * from payments where payment_code = $1 limit 1',
     [paymentCode]
+  );
+  return rows[0] || null;
+};
+
+const getPaymentByIdRow = async (id) => {
+  const { rows } = await db.query(
+    'select * from payments where id = $1 limit 1',
+    [id]
   );
   return rows[0] || null;
 };
@@ -178,18 +190,20 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
 
   // ── BANK_QR ────────────────────────────────────────────────────────────────
   if (payment_method === 'BANK_QR') {
-    if (config.sepay.enabled) {
+    if (config.payos.enabled) {
       const existingGw = payment.gateway_response || {};
-      // Tái sử dụng SePay instruction nếu đã có
-      if (existingGw.provider === 'SEPAY' && existingGw.checkout_url) {
+      if (existingGw.provider === 'PAYOS' && existingGw.checkout_url) {
         providerPayload = existingGw;
       } else {
-        providerPayload = createSepayCheckoutInstruction(payment);
+        providerPayload = await createPayosPaymentInstruction(payment);
         payment = (await updatePaymentProviderFields(payment.payment_code, {
-          transfer_content: payment.payment_code,
+          qr_payload: providerPayload.qr_payload,
+          bank_code: providerPayload.bank_bin,
+          bank_account: providerPayload.bank_account,
+          transfer_content: providerPayload.description || payment.payment_code,
           gateway_response: {
             ...providerPayload,
-            provider:    'SEPAY',
+            provider:    'PAYOS',
             mode:        'hosted_checkout',
             generatedAt: new Date().toISOString(),
           },
@@ -295,6 +309,16 @@ const cancelPayment = async ({ payment_code }) => {
   if (!payment) throw new HttpError(404, 'Payment not found');
   if (isTerminalCancelledStatus(payment.status)) return mapPayment(payment);
 
+  const gatewayResponse = payment.gateway_response || {};
+  if (
+    gatewayResponse.provider === 'PAYOS' &&
+    gatewayResponse.order_code &&
+    config.payos.enabled &&
+    !isTerminalPaidStatus(payment.status)
+  ) {
+    await cancelPayosPaymentLink(gatewayResponse.order_code, 'Cancelled by backend').catch(() => null);
+  }
+
   const { rows } = await db.query(`select * from cancel_payment($1)`, [payment_code]);
   return mapPayment(rows[0]);
 };
@@ -331,44 +355,41 @@ const handleBankWebhook = async ({ payment_code, amount, transfer_content, bank_
   });
 };
 
-// ── handleSepayIpn ────────────────────────────────────────────────────────────
+// ── handlePayosWebhook ────────────────────────────────────────────────────────
 
-const handleSepayIpn = async ({ notification_type, secret_key, order, transaction, customer, raw_payload }) => {
-  if (config.sepay.secretKey && secret_key !== config.sepay.secretKey)
-    throw new HttpError(401, 'Invalid SePay secret key');
-
-  const paymentCode = String(order.order_invoice_number || '').trim();
-  if (!paymentCode) throw new HttpError(400, 'order.order_invoice_number is required');
-
-  const payment = await getPaymentByCodeRow(paymentCode);
+const handlePayosWebhook = async (payload = {}) => {
+  const webhookData = await verifyPayosWebhookData(payload);
+  const payment =
+    await getPaymentByIdRow(webhookData.orderCode) ||
+    await getPaymentByCodeRow(String(webhookData.description || '').trim());
   if (!payment) throw new HttpError(404, 'Payment not found');
 
-  const expectedAmount    = Number(payment.final_amount || payment.amount || 0);
-  const transactionAmount = Number((transaction && transaction.transaction_amount) || order.order_amount || 0);
-  const orderAmount       = Number(order.order_amount || 0);
-  const receivedAmount    = transactionAmount || orderAmount;
+  const expectedAmount = Number(payment.final_amount || payment.amount || 0);
+  const receivedAmount = Number(webhookData.amount || 0);
 
   if (receivedAmount !== expectedAmount)
     throw new HttpError(400, `Amount mismatch. Expected ${expectedAmount} but received ${receivedAmount}`);
 
-  if (notification_type === 'ORDER_PAID') {
+  const isSuccessful =
+    payload.success === true &&
+    String(payload.code || webhookData.code || '').trim() === '00' &&
+    String(webhookData.code || '').trim() === '00';
+
+  if (isSuccessful) {
     if (isTerminalPaidStatus(payment.status)) return mapPayment(payment);
+
     return confirmPayment({
-      payment_code:            paymentCode,
+      payment_code:            payment.payment_code,
       success:                 true,
-      gateway_transaction_id:  (transaction && transaction.transaction_id) || order.order_id || `SEPAY-${Date.now()}`,
+      gateway_transaction_id:  webhookData.reference || webhookData.paymentLinkId || `PAYOS-${Date.now()}`,
       gateway_response: {
-        provider: 'SEPAY', source: 'ipn',
-        notification_type, order, transaction, customer, raw_payload,
+        provider: 'PAYOS',
+        source: 'webhook',
+        webhook: webhookData,
+        raw_payload: payload,
         received_at: new Date().toISOString(),
       },
     });
-  }
-
-  if (notification_type === 'TRANSACTION_VOID') {
-    if (isTerminalCancelledStatus(payment.status)) return mapPayment(payment);
-    const { rows } = await db.query(`select * from cancel_payment($1)`, [paymentCode]);
-    return mapPayment(rows[0]);
   }
 
   return mapPayment(payment);
@@ -496,32 +517,41 @@ const handleMomoReturn = async (query = {}) => {
   };
 };
 
-// ── buildSepayCheckoutHtml ────────────────────────────────────────────────────
+// ── getPayosCheckoutUrl ───────────────────────────────────────────────────────
 
-const buildSepayCheckoutHtml = async (paymentCode) => {
+const getPayosCheckoutUrl = async (paymentCode) => {
   const payment = await getPaymentByCodeRow(paymentCode);
   if (!payment) throw new HttpError(404, 'Payment not found');
 
   if (String(payment.payment_method).toUpperCase() !== 'BANK_QR')
-    throw new HttpError(400, 'SePay checkout is only enabled for BANK_QR payments');
+    throw new HttpError(400, 'payOS checkout is only enabled for BANK_QR payments');
 
-  let checkout      = null;
   const gatewayResp = payment.gateway_response || {};
 
-  if (gatewayResp.provider === 'SEPAY' && gatewayResp.checkout_url && gatewayResp.checkout_form_fields) {
-    checkout = {
-      checkout_url:         gatewayResp.checkout_url,
-      checkout_form_fields: gatewayResp.checkout_form_fields,
-      redirect_url:         gatewayResp.redirect_url      || null,
-      ipn_url:              gatewayResp.ipn_url            || null,
-      payment_method:       gatewayResp.payment_method     || null,
-      order_invoice_number: gatewayResp.order_invoice_number || payment.payment_code,
-    };
-  } else {
-    checkout = createSepayCheckoutInstruction(payment);
+  if (gatewayResp.provider === 'PAYOS' && gatewayResp.checkout_url) {
+    return gatewayResp.checkout_url;
   }
 
-  return buildAutoSubmitCheckoutHtml({ payment, checkout });
+  if (!config.payos.enabled) {
+    throw new HttpError(400, 'payOS payment is not configured on this server');
+  }
+
+  const checkout = await createPayosPaymentInstruction(payment);
+  await updatePaymentProviderFields(payment.payment_code, {
+    qr_payload: checkout.qr_payload,
+    bank_code: checkout.bank_bin,
+    bank_account: checkout.bank_account,
+    transfer_content: checkout.description || payment.payment_code,
+    gateway_response: {
+      ...gatewayResp,
+      ...checkout,
+      provider: 'PAYOS',
+      mode: 'hosted_checkout',
+      generatedAt: new Date().toISOString(),
+    },
+  }).catch(() => null);
+
+  return checkout.checkout_url;
 };
 
 // ── exports ───────────────────────────────────────────────────────────────────
@@ -532,8 +562,8 @@ module.exports = {
   confirmPayment,
   cancelPayment,
   handleBankWebhook,
-  handleSepayIpn,
+  handlePayosWebhook,
   handleMomoIpn,
   handleMomoReturn,
-  buildSepayCheckoutHtml,
+  getPayosCheckoutUrl,
 };

@@ -43,36 +43,7 @@ const validateBankWebhookPayload = (payload) => {
   };
 };
 
-const extractSepaySecretKey = (headers = {}) => {
-  const authorization = headers.authorization || headers.Authorization || '';
-  const xSecretKey    = headers['x-secret-key']  || headers['X-Secret-Key']  || '';
-  const xApiKey       = headers['x-api-key']      || headers['X-API-Key']      || '';
-
-  if (authorization) {
-    const trimmed = String(authorization).trim();
-    if (/^apikey\s+/i.test(trimmed))  return trimmed.replace(/^apikey\s+/i,  '').trim();
-    if (/^bearer\s+/i.test(trimmed))  return trimmed.replace(/^bearer\s+/i,  '').trim();
-    return trimmed;
-  }
-
-  if (xSecretKey) return String(xSecretKey).trim();
-  if (xApiKey)    return String(xApiKey).trim();
-  return null;
-};
-
-const validateSepayIpnPayload = (payload, headers = {}) => {
-  requireFields(payload, ['notification_type', 'order']);
-  requireFields(payload.order || {}, ['order_invoice_number']);
-  return {
-    notification_type: String(payload.notification_type).toUpperCase(),
-    secret_key:        extractSepaySecretKey(headers),
-    timestamp:         payload.timestamp ? Number(payload.timestamp) : null,
-    order:             payload.order,
-    transaction:       payload.transaction || null,
-    customer:          payload.customer    || null,
-    raw_payload:       payload,
-  };
-};
+const validatePayosWebhookPayload = (payload = {}) => payload;
 
 // FIX: MoMo IPN/Return không cần validate chặt
 // Signature verification xảy ra bên trong payment.service
@@ -83,6 +54,6 @@ module.exports = {
   validateConfirmPayload,
   validateCancelPayload,
   validateBankWebhookPayload,
-  validateSepayIpnPayload,
+  validatePayosWebhookPayload,
   validateMomoIpnPayload,
 };

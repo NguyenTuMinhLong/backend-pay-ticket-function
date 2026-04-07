@@ -4,7 +4,7 @@ const {
   validateConfirmPayload,
   validateCancelPayload,
   validateBankWebhookPayload,
-  validateSepayIpnPayload,
+  validatePayosWebhookPayload,
   validateMomoIpnPayload,
 } = require('../utils/validators');
 
@@ -53,10 +53,10 @@ const handleBankWebhook = async (req, res, next) => {
   }
 };
 
-const handleSepayIpn = async (req, res, next) => {
+const handlePayosWebhook = async (req, res, next) => {
   try {
-    const result = await paymentService.handleSepayIpn(
-      validateSepayIpnPayload(req.body, req.headers)
+    const result = await paymentService.handlePayosWebhook(
+      validatePayosWebhookPayload(req.body || {})
     );
     res.status(200).json({ success: true, payment: result });
   } catch (error) {
@@ -127,11 +127,10 @@ const handleMomoReturn = async (req, res, next) => {
   }
 };
 
-const redirectToSepayCheckout = async (req, res, next) => {
+const redirectToPayosCheckout = async (req, res, next) => {
   try {
-    const html = await paymentService.buildSepayCheckoutHtml(req.params.paymentCode);
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.send(html);
+    const redirectUrl = await paymentService.getPayosCheckoutUrl(req.params.paymentCode);
+    res.redirect(302, redirectUrl);
   } catch (error) {
     next(error);
   }
@@ -185,9 +184,9 @@ module.exports = {
   confirmPayment,
   cancelPayment,
   handleBankWebhook,
-  handleSepayIpn,
+  handlePayosWebhook,
   handleMomoIpn,
   handleMomoReturn,
-  redirectToSepayCheckout,
+  redirectToPayosCheckout,
   renderPaymentReturnPage,
 };
