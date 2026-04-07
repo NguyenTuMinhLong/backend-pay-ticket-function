@@ -102,6 +102,10 @@ const createPayosPaymentInstruction = async (payment) => {
   const expiresAt = payment.expires_at
     ? Math.floor(new Date(payment.expires_at).getTime() / 1000)
     : undefined;
+  if (expiresAt && expiresAt <= Math.floor(Date.now() / 1000)) {
+    throw new HttpError(400, 'Payment has expired. Please create a new booking and try again.');
+  }
+
   const returnUrl = resolveUrl({
     providedUrl: config.payos.returnUrl,
     fallbackPath: '/payments/payos/return/success',

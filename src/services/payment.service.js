@@ -897,6 +897,14 @@ const getPayosCheckoutUrl = async (paymentCode) => {
   if (String(payment.payment_method).toUpperCase() !== 'BANK_QR')
     throw new HttpError(400, 'payOS checkout is only enabled for BANK_QR payments');
 
+  if (isTerminalPaidStatus(payment.status)) {
+    throw new HttpError(400, 'Payment has already been completed.');
+  }
+
+  if (isTerminalCancelledStatus(payment.status)) {
+    throw new HttpError(400, 'Payment has expired or was cancelled. Please create a new booking and try again.');
+  }
+
   const gatewayResp = payment.gateway_response || {};
 
   if (gatewayResp.provider === 'PAYOS' && gatewayResp.checkout_url) {
