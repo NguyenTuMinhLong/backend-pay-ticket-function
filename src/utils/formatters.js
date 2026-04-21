@@ -75,7 +75,7 @@ const buildPaymentInstruction = ({ payment, providerPayload = {}, bankConfig, pa
       return_url:   paypalPayload.return_url || (paypalConfig && paypalConfig.returnUrl) || null,
       cancel_url:   paypalPayload.cancel_url || (paypalConfig && paypalConfig.cancelUrl) || null,
       currency:     paypalPayload.currency_code || (paypalConfig && paypalConfig.currency) || payment.currency || null,
-      amount:       paypalPayload.amount || payment.final_amount || payment.amount || null,
+      amount:       paypalPayload.amount ?? payment.final_amount ?? payment.amount ?? null,
       environment:  paypalPayload.environment || (paypalConfig && paypalConfig.env) || null,
       auto_confirm_ready: true,
       note: 'Frontend redirect user sang approve_url để thanh toán PayPal sandbox.',

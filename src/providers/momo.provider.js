@@ -90,7 +90,7 @@ const createMomoPaymentInstruction = async (payment) => {
   const requestType = config.momo.requestType || 'payWithMethod';
   const lang        = config.momo.lang || 'vi';
 
-  const amount    = normalizeAmount(payment.final_amount || payment.amount || 0);
+  const amount    = normalizeAmount(payment.final_amount ?? payment.amount ?? 0);
   const orderId   = String(payment.payment_code);
   const requestId = `REQ_${orderId}_${Date.now()}`;
   const orderInfo = `Thanh toan don hang ${orderId}`;

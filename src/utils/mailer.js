@@ -78,7 +78,7 @@ const sendEmail = async ({ to, subject, html, text }) => {
 const buildInstructionBlock = ({ payment, instruction }) => {
   if (!instruction) return '';
 
-  const amount = instruction.amount || payment.final_amount || payment.amount || 0;
+  const amount = instruction.amount ?? payment.final_amount ?? payment.amount ?? 0;
 
   if (instruction.type === 'MOMO') {
     const qrImageUrl = instruction.qr_code_url || instruction.qr_payload || '';
@@ -174,7 +174,7 @@ const buildInstructionBlock = ({ payment, instruction }) => {
 };
 
 const buildPaymentPendingEmailHtml = ({ payment, instruction }) => {
-  const amount = payment.final_amount || payment.amount || 0;
+  const amount = payment.final_amount ?? payment.amount ?? 0;
   const expiresAt = payment.expires_at || '';
 
   return `<!doctype html>
@@ -226,7 +226,7 @@ const buildPaymentPendingEmailText = ({ payment, instruction }) => {
     '',
     `Payment Code: ${payment.payment_code}`,
     `Method: ${payment.payment_method}`,
-    `Amount: ${formatCurrency(payment.final_amount || payment.amount || 0)}`,
+    `Amount: ${formatCurrency(payment.final_amount ?? payment.amount ?? 0)}`,
     `Expires At: ${formatDateTime(payment.expires_at)}`,
     '',
   ];

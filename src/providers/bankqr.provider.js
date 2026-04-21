@@ -11,7 +11,7 @@ const createBankQrInstruction = (payment) => {
     );
   }
 
-  const amount = Number(payment.final_amount || payment.amount || 0);
+  const amount = Number(payment.final_amount ?? payment.amount ?? 0);
   const transferContent = payment.payment_code;
 
   const qrUrl =

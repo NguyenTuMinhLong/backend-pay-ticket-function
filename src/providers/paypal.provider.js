@@ -172,7 +172,7 @@ const createPayPalOrder = async (payment) => {
     );
   }
 
-  const amountValue = normalizeAmount(payment.final_amount || payment.amount || 0);
+  const amountValue = normalizeAmount(payment.final_amount ?? payment.amount ?? 0);
   const currency = String(config.paypal.currency || 'VND').toUpperCase();
 
   const response = await paypalRequest({

@@ -100,7 +100,7 @@ const resolveUrl = ({ providedUrl, fallbackPath, paymentCode }) => {
 
 const createPayosPaymentInstruction = async (payment) => {
   const payos = getPayosClient();
-  const amount = Math.round(Number(payment.final_amount || payment.amount || 0));
+  const amount = Math.round(Number(payment.final_amount ?? payment.amount ?? 0));
 
   if (!Number.isFinite(amount) || amount <= 0) {
     throw new HttpError(400, 'payOS amount is invalid');

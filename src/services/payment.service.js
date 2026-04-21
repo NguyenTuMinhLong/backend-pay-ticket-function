@@ -35,6 +35,9 @@ const isTerminalPaidStatus = (status) =>
 const isTerminalCancelledStatus = (status) =>
   ['CANCELLED', 'FAILED', 'VOID', 'EXPIRED'].includes(String(status || '').toUpperCase());
 
+const getPaymentChargeAmount = (payment) =>
+  Number(payment?.final_amount ?? payment?.amount ?? 0);
+
 // FIX: truyền momoConfig vào buildPaymentInstruction
 const mapPayment = (payment, providerPayload = {}) => ({
   ...payment,
@@ -216,6 +219,19 @@ const initPayment = async ({ booking_id, email, phone, name, payment_method, vou
     if (!payment) throw new HttpError(500, 'init_payment_by_contact returned no payment');
   }
 
+  if (getPaymentChargeAmount(payment) <= 0) {
+    return confirmPayment({
+      payment_code: payment.payment_code,
+      success: true,
+      gateway_transaction_id: `AUTO-ZERO-${Date.now()}`,
+      gateway_response: {
+        provider: 'INTERNAL',
+        source: 'auto_zero_amount',
+        note: 'Auto confirmed because final amount is zero',
+      },
+    });
+  }
+
   let providerPayload = {};
 
   // ── BANK_QR ────────────────────────────────────────────────────────────────
@@ -382,7 +398,7 @@ const handleBankWebhook = async ({ payment_code, amount, transfer_content, bank_
   if (!payment) throw new HttpError(404, 'Payment not found');
   if (isTerminalPaidStatus(payment.status)) return mapPayment(payment);
 
-  const expectedAmount = Number(payment.final_amount || payment.amount || 0);
+  const expectedAmount = getPaymentChargeAmount(payment);
   if (Number(amount) !== expectedAmount)
     throw new HttpError(400, `Amount mismatch. Expected ${expectedAmount} but received ${amount}`);
 
@@ -417,7 +433,7 @@ const handlePayosWebhook = async (payload = {}) => {
     await getPaymentByCodeRow(String(webhookData.description || '').trim());
   if (!payment) throw new HttpError(404, 'Payment not found');
 
-  const expectedAmount = Number(payment.final_amount || payment.amount || 0);
+  const expectedAmount = getPaymentChargeAmount(payment);
   const receivedAmount = Number(webhookData.amount || 0);
 
   if (receivedAmount !== expectedAmount)
@@ -466,7 +482,7 @@ const processMomoCallback = async (body = {}, source = 'ipn') => {
     return { ok: false, resultCode: 42, message: 'Payment not found', payment_code: paymentCode };
   }
 
-  const expectedAmount = normalizeAmount(payment.final_amount || payment.amount || 0);
+  const expectedAmount = normalizeAmount(getPaymentChargeAmount(payment));
   const receivedAmount = Number(body.amount || 0);
   if (expectedAmount !== receivedAmount) {
     if (!isTerminalCancelledStatus(payment.status) && !isTerminalPaidStatus(payment.status)) {
@@ -693,7 +709,7 @@ const handlePayosReturn = async (returnStatus = 'success', query = {}) => {
   const latestPaymentLinkId = paymentLink.id || paymentLinkId;
 
   if (payosStatus === 'PAID') {
-    const expectedAmount = Number(payment.final_amount || payment.amount || 0);
+    const expectedAmount = getPaymentChargeAmount(payment);
     const paidAmount = Number(paymentLink.amountPaid || paymentLink.amount || 0);
     if (paidAmount !== expectedAmount) {
       return buildPayosFrontendRedirect({
